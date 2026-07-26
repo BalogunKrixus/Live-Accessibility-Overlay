@@ -19,6 +19,7 @@ const RUNTIME = [
   'src/audits/taborder.js',
   'src/ui/styles.js',
   'src/ui/icons.js',
+  'src/ui/copy.js',
   'src/ui/overlay.js',
   'src/ui/panel.js',
   'src/content/main.js',

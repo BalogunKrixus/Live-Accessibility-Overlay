@@ -355,236 +355,92 @@ svg { display: block; flex: none; }
 
 /* --------------------------------------------------------------- overview */
 
-.lao-summary { padding: var(--lao-s5) var(--lao-s4) var(--lao-s4); }
-
-.lao-count {
-  display: flex; align-items: baseline; gap: var(--lao-s2);
+/* The headline answers "how bad is it?" in words. No score: a score invites
+   gaming and tells nobody what to do next. */
+.lao-hero { padding: var(--lao-s6) var(--lao-s4) var(--lao-s2); }
+.lao-hero-big {
+  font-size: 26px; font-weight: 600;
+  letter-spacing: -0.028em; line-height: 1.15;
+  color: var(--lao-text);
 }
-.lao-count b {
-  font-size: var(--lao-size-hero);
-  font-weight: 600;
-  letter-spacing: -0.035em;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.lao-count span {
-  font-size: var(--lao-size-lead);
+.lao-hero-small {
+  margin-top: 6px;
+  font-size: var(--lao-size-body);
   color: var(--lao-text-muted);
-  letter-spacing: -0.005em;
+  max-width: 30ch;
 }
-
-/* Proportional severity bar. Honest about the mix without inventing a score. */
-.lao-bar {
-  display: flex; gap: 3px; height: 6px; margin-top: var(--lao-s4);
-  border-radius: var(--lao-r-pill); overflow: hidden;
-}
-.lao-bar i {
-  display: block; height: 100%; border-radius: var(--lao-r-pill);
-  transition: flex-grow var(--lao-t-panel) var(--lao-ease-soft),
-              opacity var(--lao-t-base) var(--lao-ease-out);
-  min-width: 3px;
-}
-.lao-bar i[data-sev="critical"] { background: var(--lao-critical); }
-.lao-bar i[data-sev="warning"]  { background: var(--lao-warning); }
-.lao-bar i[data-sev="notice"]   { background: var(--lao-notice); }
-.lao-bar i[data-sev="clear"]    { background: var(--lao-brand-edge); }
-
-.lao-legend {
-  display: flex; flex-wrap: wrap; gap: var(--lao-s1) var(--lao-s3);
-  margin-top: var(--lao-s3);
-  font-size: var(--lao-size-meta);
-  color: var(--lao-text-muted);
-}
-.lao-legend li { display: flex; align-items: center; gap: 6px; }
-.lao-legend b { font-weight: 600; color: var(--lao-text); font-variant-numeric: tabular-nums; }
-
-/* Severity meter: three segments, filled by rank. Carries the same meaning as
-   the hue does, so severity survives greyscale and colour blindness. */
-.lao-meter { display: flex; gap: 2px; align-items: center; }
-.lao-meter i {
-  width: 3px; height: 10px; border-radius: 1px;
-  background: currentColor; opacity: 0.22;
-}
-.lao-meter[data-sev="critical"] { color: var(--lao-critical); }
-.lao-meter[data-sev="warning"]  { color: var(--lao-warning); }
-.lao-meter[data-sev="notice"]   { color: var(--lao-notice); }
-.lao-meter[data-sev="clear"]    { color: var(--lao-brand); }
-.lao-meter[data-sev="critical"] i { opacity: 1; }
-.lao-meter[data-sev="warning"] i:nth-child(-n+2) { opacity: 1; }
-.lao-meter[data-sev="notice"] i:nth-child(-n+1) { opacity: 1; }
-.lao-meter[data-sev="clear"] i { opacity: 1; }
-
-/* --------------------------------------------------------------- lens list */
 
 .lao-section-label {
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--lao-s4) var(--lao-s4) var(--lao-s2);
+  padding: var(--lao-s5) var(--lao-s4) var(--lao-s2);
   font-size: var(--lao-size-micro);
-  font-weight: 600;
-  letter-spacing: 0.085em;
-  text-transform: uppercase;
+  font-weight: 600; letter-spacing: 0.085em; text-transform: uppercase;
   color: var(--lao-text-faint);
 }
 
-.lao-lenses { padding: 0 var(--lao-s3) var(--lao-s3); display: grid; gap: 2px; }
+/* Severity as a single dot plus a word. Two tiers, not three — "notice" is a
+   distinction only an expert wants to make. */
+.lao-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex: none; margin-top: 5px;
+  background: var(--lao-critical);
+}
+.lao-dot[data-tier="check"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--lao-warning);
+}
+.lao-dot[data-tier="none"] { background: var(--lao-line-strong); }
 
-.lao-lens {
+/* ------------------------------------------------------------ issue rows */
+
+.lao-items { padding: 0 var(--lao-s3); display: grid; gap: 2px; }
+
+.lao-item {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  align-items: center;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
   gap: var(--lao-s3);
-  padding: 10px var(--lao-s2) 10px var(--lao-s3);
+  width: 100%; min-width: 0;
+  padding: 11px var(--lao-s2) 11px var(--lao-s3);
   border-radius: var(--lao-r-md);
-  min-width: 0; /* Grid items default to min-width:auto and would not shrink. */
   transition: background var(--lao-t-micro) var(--lao-ease-out);
 }
-.lao-lens:hover { background: var(--lao-surface-hover); }
-.lao-lens[data-on="false"] .lao-lens-glyph,
-.lao-lens[data-on="false"] .lao-lens-name { opacity: 0.5; }
+.lao-item:hover { background: var(--lao-surface-hover); }
+.lao-item:hover .lao-chevron { transform: translateX(2px); }
 
-.lao-lens-glyph {
-  width: 28px; height: 28px;
-  display: grid; place-items: center;
-  border-radius: 9px;
-  background: var(--lao-surface-sunken);
-  color: var(--lao-text-muted);
-  transition: background var(--lao-t-base) var(--lao-ease-out),
-              color var(--lao-t-base) var(--lao-ease-out),
-              opacity var(--lao-t-base) var(--lao-ease-out);
-}
-.lao-lens[data-on="true"] .lao-lens-glyph { background: var(--lao-brand-wash); color: var(--lao-brand); }
-
-/* The label is the drill-in target; the switch is separate. Two jobs, two
-   controls — no ambiguous single hit area. */
-.lao-lens-open {
-  display: flex; flex-direction: column; gap: 1px; min-width: 0;
-  padding: 2px 0; border-radius: var(--lao-r-sm);
-}
-.lao-lens-name {
+.lao-item-body { display: grid; gap: 2px; min-width: 0; }
+.lao-item-title {
   font-size: var(--lao-size-body); font-weight: 500;
-  letter-spacing: -0.006em; white-space: nowrap;
-  transition: opacity var(--lao-t-base) var(--lao-ease-out);
+  letter-spacing: -0.006em; line-height: 1.35;
+  overflow-wrap: anywhere;
 }
-.lao-lens-meta {
+.lao-item-meta {
   font-size: var(--lao-size-meta); color: var(--lao-text-faint);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.lao-lens-open:hover .lao-lens-name { color: var(--lao-brand); }
-
-.lao-tally {
-  display: flex; align-items: center; justify-content: flex-end;
-  min-width: 20px;
-  font-size: var(--lao-size-meta); font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--lao-text-muted);
-}
-.lao-tally-clear { display: block; opacity: 0.9; }
-
-/* A focus stop with no accessible name — the absence is the finding. */
-.lao-unnamed { font-style: italic; opacity: 0.85; }
-.lao-tally[data-sev="critical"] { color: var(--lao-critical); }
-.lao-tally[data-sev="warning"] { color: var(--lao-warning); }
-.lao-tally[data-sev="notice"] { color: var(--lao-notice); }
-.lao-tally[data-sev="clear"] { color: var(--lao-brand); }
-
-/* Switch ------------------------------------------------------------------ */
-
-.lao-switch {
-  position: relative;
-  width: 34px; height: 20px;
-  border-radius: var(--lao-r-pill);
-  background: var(--lao-line-strong);
-  flex: none;
-  transition: background var(--lao-t-base) var(--lao-ease-out);
-}
-.lao-switch::after {
-  content: "";
-  position: absolute; top: 2px; left: 2px;
-  width: 16px; height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.28);
+.lao-chevron {
+  color: var(--lao-text-faint); margin-top: 3px;
   transition: transform var(--lao-t-base) var(--lao-ease-soft);
 }
-.lao-switch[aria-checked="true"] { background: var(--lao-brand); }
-.lao-switch[aria-checked="true"]::after { transform: translateX(14px); }
-.lao-switch:active::after { width: 18px; }
 
-/* ------------------------------------------------------- "start here" list */
-
-.lao-top { padding: 0 var(--lao-s3) var(--lao-s4); display: grid; gap: 2px; }
-
-.lao-top-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: var(--lao-s3);
-  width: 100%;
-  min-width: 0;
-  padding: 9px var(--lao-s2) 9px var(--lao-s3);
-  border-radius: var(--lao-r-md);
-  transition: background var(--lao-t-micro) var(--lao-ease-out);
-}
-.lao-top-row:hover { background: var(--lao-surface-hover); }
-.lao-top-row:hover .lao-chevron { transform: translateX(2px); }
-
-.lao-top-body { display: grid; gap: 1px; min-width: 0; }
-.lao-top-title {
-  font-size: var(--lao-size-meta); font-weight: 500;
-  letter-spacing: -0.004em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.lao-top-meta {
-  font-size: var(--lao-size-micro);
-  color: var(--lao-text-faint);
-  letter-spacing: 0.01em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-/* --------------------------------------------------------------- coverage */
-
-/* The denominator behind the counts. Quiet by design — it is reassurance that
-   the scan was thorough, not a headline. */
-.lao-coverage {
-  margin: auto var(--lao-s4) 0;
-  padding: var(--lao-s3) 0 var(--lao-s5);
-  border-top: 1px solid var(--lao-line);
-  display: grid; gap: 3px;
-}
-.lao-coverage-label {
-  font-size: var(--lao-size-micro);
-  font-weight: 600; letter-spacing: 0.075em; text-transform: uppercase;
-  color: var(--lao-text-faint);
-}
-.lao-coverage-line {
-  font-size: var(--lao-size-meta);
-  color: var(--lao-text-muted);
-  line-height: 1.6;
-}
-.lao-coverage-line b { color: var(--lao-text); font-weight: 600; font-variant-numeric: tabular-nums; }
-.lao-sep { padding: 0 6px; color: var(--lao-line-strong); }
-
-/* The overview is a column so the coverage strip can sit at the bottom on a
-   short page; children keep their natural height so scrolling still works. */
-.lao-view--home { display: flex; flex-direction: column; }
-.lao-view--home > * { flex: none; }
+/* The two deeper views. Quieter than the issue list so they never compete
+   with it for attention. */
+.lao-items--quiet .lao-item-title { font-weight: 400; color: var(--lao-text-muted); }
+.lao-explore { margin-top: auto; padding-bottom: var(--lao-s4); }
 
 /* ------------------------------------------------------------- all clear */
 
 .lao-clear {
   display: flex; flex-direction: column; align-items: center;
   text-align: center;
-  padding: var(--lao-s7) var(--lao-s6) var(--lao-s8);
+  padding: var(--lao-s8) var(--lao-s6) var(--lao-s6);
   gap: var(--lao-s4);
 }
 .lao-clear-mark { position: relative; width: 92px; height: 92px; display: grid; place-items: center; }
 .lao-clear-mark svg { color: var(--lao-brand); position: relative; z-index: 1; }
-
-/* Concentric rings settle outward once, then hold. */
 .lao-clear-mark::before,
 .lao-clear-mark::after {
-  content: "";
-  position: absolute; inset: 0;
+  content: ""; position: absolute; inset: 0;
   border-radius: 50%;
   border: 1px solid var(--lao-brand-edge);
   opacity: 0;
@@ -599,46 +455,28 @@ svg { display: block; flex: none; }
   0%   { transform: scale(0.6); opacity: 0; }
   100% { transform: scale(1); opacity: 0.4; }
 }
-.lao-clear-title { font-size: var(--lao-size-title); font-weight: 600; letter-spacing: -0.015em; }
-.lao-clear p { font-size: var(--lao-size-body); color: var(--lao-text-muted); max-width: 26ch; }
-
-.lao-tallies {
-  display: grid; grid-template-columns: repeat(2, 1fr);
-  gap: 1px; width: 100%;
-  background: var(--lao-line);
-  border: 1px solid var(--lao-line);
-  border-radius: var(--lao-r-md);
-  overflow: hidden;
-  margin-top: var(--lao-s2);
-}
-.lao-tallies div {
-  background: var(--lao-surface);
-  padding: var(--lao-s3) var(--lao-s3);
-  display: flex; flex-direction: column; gap: 2px;
-}
-.lao-tallies b {
-  font-size: var(--lao-size-numeral); font-weight: 600;
-  letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
-}
-.lao-tallies span {
-  font-size: var(--lao-size-micro); text-transform: uppercase;
-  letter-spacing: 0.07em; color: var(--lao-text-faint); font-weight: 600;
+.lao-clear-title { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+.lao-clear p { font-size: var(--lao-size-body); color: var(--lao-text-muted); max-width: 30ch; }
+.lao-clear-detail {
+  font-size: var(--lao-size-meta); color: var(--lao-text-faint);
+  padding-top: var(--lao-s2); border-top: 1px solid var(--lao-line);
+  width: 100%; line-height: 1.7;
 }
 
-/* ------------------------------------------------------------ detail view */
+/* ============================================================ sub screens */
 
-.lao-detail-head {
+.lao-sub-head {
   position: sticky; top: 0; z-index: 2;
-  display: flex; align-items: center; gap: var(--lao-s2);
-  padding: var(--lao-s3) var(--lao-s3) var(--lao-s3) var(--lao-s2);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lao-s2);
+  padding: 9px var(--lao-s3) 9px var(--lao-s2);
   background: color-mix(in srgb, var(--lao-surface) 88%, transparent);
   backdrop-filter: blur(12px) saturate(1.4);
   -webkit-backdrop-filter: blur(12px) saturate(1.4);
   border-bottom: 1px solid var(--lao-line);
 }
 .lao-back {
-  display: flex; align-items: center; gap: 5px;
-  padding: 6px 10px 6px 7px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 10px 6px 6px;
   border-radius: var(--lao-r-sm);
   font-size: var(--lao-size-meta); font-weight: 500;
   color: var(--lao-text-muted);
@@ -649,150 +487,132 @@ svg { display: block; flex: none; }
 .lao-back svg { transition: transform var(--lao-t-base) var(--lao-ease-out); }
 .lao-back:hover svg { transform: translateX(-2px); }
 
-.lao-detail-title {
-  font-size: var(--lao-size-body); font-weight: 600;
-  letter-spacing: -0.01em; flex: 1; min-width: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.lao-sub-title {
+  font-size: var(--lao-size-meta); font-weight: 600;
+  color: var(--lao-text-muted); padding-right: var(--lao-s2);
 }
 
-.lao-issues { padding: var(--lao-s3); display: grid; gap: var(--lao-s2); }
+/* Prev/Next through the issue list — the whole interaction model in one
+   control, so nobody has to go back to a menu between issues. */
+.lao-stepper { display: flex; align-items: center; gap: 2px; flex: none; }
+.lao-stepper-count {
+  font-size: var(--lao-size-micro); font-weight: 600;
+  color: var(--lao-text-faint);
+  font-variant-numeric: tabular-nums;
+  min-width: 56px; text-align: center;
+  letter-spacing: 0.02em;
+}
+.lao-step-btn {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border-radius: var(--lao-r-sm);
+  color: var(--lao-text-muted);
+  transition: background var(--lao-t-micro) var(--lao-ease-out),
+              color var(--lao-t-micro) var(--lao-ease-out);
+}
+.lao-step-btn:hover:not(:disabled) { background: var(--lao-surface-hover); color: var(--lao-text); }
+.lao-step-btn:disabled { opacity: 0.3; cursor: default; }
 
-.lao-card {
+.lao-sub-body { padding: var(--lao-s4); display: grid; gap: var(--lao-s5); }
+
+.lao-tier {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: var(--lao-size-meta); font-weight: 600;
+  color: var(--lao-critical);
+}
+.lao-tier[data-tier="check"] { color: var(--lao-warning); }
+.lao-tier .lao-dot { margin-top: 0; }
+
+.lao-issue-title {
+  font-size: 20px; font-weight: 600;
+  letter-spacing: -0.022em; line-height: 1.25;
+  margin-top: -12px;
+}
+
+.lao-block { display: grid; gap: var(--lao-s2); }
+.lao-block-title {
+  font-size: var(--lao-size-micro); font-weight: 600;
+  letter-spacing: 0.085em; text-transform: uppercase;
+  color: var(--lao-text-faint);
+}
+.lao-prose { font-size: var(--lao-size-body); color: var(--lao-text-muted); line-height: 1.6; }
+
+/* Evidence: the real thing, shown rather than described. */
+.lao-sample {
+  display: grid; gap: 4px;
+  padding: var(--lao-s5) var(--lao-s4);
+  border-radius: var(--lao-r-md);
+  border: 1px solid var(--lao-line);
+}
+.lao-sample-lg { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; }
+.lao-sample-sm { font-size: var(--lao-size-body); }
+
+.lao-quote {
+  display: grid; gap: 4px;
+  padding: var(--lao-s3) var(--lao-s4);
+  border-radius: var(--lao-r-md);
+  background: var(--lao-surface-sunken);
+  border-left: 2px solid var(--lao-line-strong);
+}
+.lao-quote-label {
+  font-size: var(--lao-size-micro); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--lao-text-faint);
+}
+.lao-quote-text { font-size: var(--lao-size-body); color: var(--lao-text); overflow-wrap: anywhere; }
+
+/* The colour swap: old to new, as two chips. Says what to change without
+   requiring anyone to know what a hex value is. */
+.lao-swap {
+  display: grid; grid-template-columns: auto 1fr auto;
+  align-items: center; gap: var(--lao-s3);
+  width: 100%;
+  padding: 11px var(--lao-s3);
   border: 1px solid var(--lao-line);
   border-radius: var(--lao-r-md);
-  background: var(--lao-surface-raised);
-  overflow: hidden;
-  transition: border-color var(--lao-t-base) var(--lao-ease-out),
-              box-shadow var(--lao-t-base) var(--lao-ease-out),
-              transform var(--lao-t-micro) var(--lao-ease-out);
-}
-.lao-card:hover { border-color: var(--lao-line-strong); }
-.lao-card[data-open="true"] { box-shadow: var(--lao-shadow-pop); border-color: transparent; }
-
-.lao-card-btn {
-  width: 100%;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: start;
-  gap: var(--lao-s3);
-  padding: var(--lao-s3);
-  transition: background var(--lao-t-micro) var(--lao-ease-out);
-}
-.lao-card-btn:hover { background: var(--lao-surface-hover); }
-
-.lao-card-body { min-width: 0; display: grid; gap: 3px; }
-.lao-card-title {
-  font-size: var(--lao-size-body); font-weight: 600; letter-spacing: -0.008em;
-  overflow-wrap: anywhere;
-}
-.lao-card-sub {
-  font-size: var(--lao-size-meta); color: var(--lao-text-muted);
-  overflow: hidden; text-overflow: ellipsis;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-}
-.lao-chevron {
-  color: var(--lao-text-faint);
-  transition: transform var(--lao-t-base) var(--lao-ease-soft);
-  margin-top: 2px;
-}
-.lao-card[data-open="true"] .lao-chevron { transform: rotate(90deg); }
-
-/* Expanding detail: grid-template-rows animates cleanly from 0 without
-   measuring heights, so it stays smooth on long content. */
-.lao-card-detail {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--lao-t-base) var(--lao-ease-soft);
-}
-.lao-card[data-open="true"] .lao-card-detail { grid-template-rows: 1fr; }
-.lao-card-detail > div { overflow: hidden; min-height: 0; }
-.lao-card-detail-inner {
-  padding: 0 var(--lao-s3) var(--lao-s3);
-  display: grid; gap: var(--lao-s3);
-  border-top: 1px solid var(--lao-line);
-  margin-top: -1px; padding-top: var(--lao-s3);
-}
-
-.lao-prose { font-size: var(--lao-size-meta); color: var(--lao-text-muted); line-height: 1.55; }
-.lao-prose strong { color: var(--lao-text); font-weight: 600; }
-
-/* Colour pair readout ----------------------------------------------------- */
-
-.lao-pair {
-  display: flex; align-items: stretch;
-  border: 1px solid var(--lao-line); border-radius: var(--lao-r-sm);
-  overflow: hidden;
-}
-.lao-pair-sample {
-  flex: 1; min-width: 0;
-  padding: 10px var(--lao-s3);
-  display: grid; gap: 3px; align-content: center;
-}
-.lao-pair-sample b { font-size: var(--lao-size-body); font-weight: 600; letter-spacing: -0.01em; }
-.lao-pair-sample code {
-  font-family: var(--lao-mono); font-size: var(--lao-size-micro);
-  letter-spacing: 0.02em; opacity: 0.85;
-}
-.lao-ratio {
-  flex: none; display: grid; place-content: center; gap: 1px;
-  padding: 10px var(--lao-s3);
-  text-align: right;
-  background: var(--lao-surface-sunken);
-  border-left: 1px solid var(--lao-line);
-}
-.lao-ratio b {
-  font-size: var(--lao-size-numeral); font-weight: 600;
-  letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1;
-}
-.lao-ratio span {
-  font-size: var(--lao-size-micro); color: var(--lao-text-faint);
-  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
-}
-
-/* Suggested fix ----------------------------------------------------------- */
-
-.lao-fix { display: grid; gap: var(--lao-s2); }
-.lao-fix-row {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--lao-s3);
-  padding: 9px var(--lao-s3);
-  border: 1px solid var(--lao-line);
-  border-radius: var(--lao-r-sm);
   background: var(--lao-surface);
   transition: border-color var(--lao-t-micro) var(--lao-ease-out),
               background var(--lao-t-micro) var(--lao-ease-out);
-  width: 100%;
 }
-.lao-fix-row:hover { border-color: var(--lao-brand-edge); background: var(--lao-brand-wash); }
-.lao-swatches { display: flex; align-items: center; }
-.lao-swatch {
-  width: 20px; height: 20px; border-radius: 50%;
+.lao-swap:hover { border-color: var(--lao-brand-edge); background: var(--lao-brand-wash); }
+.lao-swap-chips { display: flex; align-items: center; gap: 3px; }
+.lao-chip-colour {
+  width: 22px; height: 22px; border-radius: 6px;
   border: 1px solid var(--lao-scrim);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
 }
-.lao-swatch + .lao-swatch { margin-left: -7px; }
-.lao-fix-label { display: grid; gap: 1px; min-width: 0; }
-.lao-fix-label b { font-size: var(--lao-size-meta); font-weight: 600; }
-.lao-fix-label code {
-  font-family: var(--lao-mono); font-size: var(--lao-size-micro);
-  color: var(--lao-text-faint); letter-spacing: 0.02em;
+.lao-swap-arrow { color: var(--lao-text-faint); }
+.lao-swap-body { display: grid; gap: 1px; min-width: 0; }
+.lao-swap-hex {
+  font-family: var(--lao-mono); font-size: var(--lao-size-body);
+  font-weight: 600; letter-spacing: 0.01em;
 }
-.lao-fix-ratio {
-  font-size: var(--lao-size-meta); font-weight: 600;
-  font-variant-numeric: tabular-nums; color: var(--lao-brand);
-}
+.lao-swap-note { font-size: var(--lao-size-micro); color: var(--lao-text-faint); }
+.lao-copied { color: var(--lao-brand); font-weight: 600; }
+.lao-copy-icon { color: var(--lao-text-faint); }
 
-.lao-copied {
+/* Stepping through the places one issue occurs, one at a time. */
+.lao-places {
+  display: grid; grid-template-columns: auto 1fr auto;
+  align-items: center; gap: var(--lao-s2);
+  padding: 7px var(--lao-s2);
+  border: 1px solid var(--lao-line);
+  border-radius: var(--lao-r-md);
+}
+.lao-places-body { display: grid; gap: 1px; min-width: 0; text-align: center; }
+.lao-places-count {
   font-size: var(--lao-size-micro); font-weight: 600;
-  color: var(--lao-brand); letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--lao-text-faint); font-variant-numeric: tabular-nums;
 }
-
-/* Action row -------------------------------------------------------------- */
+.lao-places-text {
+  font-size: var(--lao-size-meta); color: var(--lao-text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 .lao-actions { display: flex; gap: var(--lao-s2); flex-wrap: wrap; }
 .lao-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  min-height: 30px;
-  padding: 0 12px;
+  min-height: 34px; padding: 0 14px;
   border-radius: var(--lao-r-sm);
   font-size: var(--lao-size-meta); font-weight: 600;
   border: 1px solid var(--lao-line-strong);
@@ -803,36 +623,41 @@ svg { display: block; flex: none; }
 }
 .lao-btn:hover { background: var(--lao-surface-hover); border-color: var(--lao-text-faint); }
 .lao-btn:active { transform: scale(0.97); }
-.lao-btn[data-variant="primary"] {
-  background: var(--lao-brand); border-color: var(--lao-brand);
-  color: var(--lao-focus-contrast);
+
+/* Technical details: present for engineers, invisible to everyone else.
+   Native <details> carries the right semantics without any ARIA of ours. */
+.lao-tech {
+  border-top: 1px solid var(--lao-line);
+  padding-top: var(--lao-s3);
 }
-.lao-btn[data-variant="primary"]:hover { background: var(--lao-brand-ink); border-color: var(--lao-brand-ink); }
-
-/* Occurrence list --------------------------------------------------------- */
-
-.lao-occurrences { display: grid; gap: 1px; border-radius: var(--lao-r-sm); overflow: hidden; }
-.lao-occurrence {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--lao-s2);
-  padding: 7px var(--lao-s2);
-  background: var(--lao-surface-sunken);
+.lao-tech-summary {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--lao-size-meta); font-weight: 500;
+  color: var(--lao-text-faint);
+  cursor: pointer;
+  padding: 4px 0;
+  border-radius: var(--lao-r-sm);
+  list-style: none;
+}
+.lao-tech-summary::-webkit-details-marker { display: none; }
+.lao-tech-summary:hover { color: var(--lao-text-muted); }
+.lao-tech-summary .lao-chevron { margin-top: 0; }
+.lao-tech[open] .lao-tech-summary .lao-chevron { transform: rotate(90deg); }
+.lao-tech-summary:focus-visible {
+  outline: 2px solid var(--lao-focus); outline-offset: 2px;
+}
+.lao-tech-list {
+  display: grid; gap: 5px;
+  padding: var(--lao-s2) 0 var(--lao-s1);
   font-size: var(--lao-size-meta);
-  transition: background var(--lao-t-micro) var(--lao-ease-out);
-  width: 100%;
-}
-.lao-occurrence:hover { background: var(--lao-surface-active); }
-.lao-occurrence code {
-  font-family: var(--lao-mono); font-size: var(--lao-size-micro);
-  color: var(--lao-text-faint); white-space: nowrap;
-}
-.lao-occurrence span {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--lao-text-muted);
+  line-height: 1.5;
 }
+.lao-tech-sel { font-family: var(--lao-mono); font-size: var(--lao-size-micro); color: var(--lao-text-faint); }
 
-/* Heading outline --------------------------------------------------------- */
+/* --------------------------------------------------------- page outline */
 
-.lao-outline { padding: 0 var(--lao-s3) var(--lao-s4); display: grid; }
+.lao-outline { display: grid; }
 
 .lao-h {
   display: grid;
@@ -842,15 +667,12 @@ svg { display: block; flex: none; }
   padding: 7px var(--lao-s2);
   border-radius: var(--lao-r-sm);
   width: 100%;
-  position: relative;
   transition: background var(--lao-t-micro) var(--lao-ease-out);
 }
 .lao-h:hover { background: var(--lao-surface-hover); }
 
-/* The indent rail: a hairline per level, so depth is legible at a glance
-   without relying on whitespace alone. */
-/* The rail cancels the row's vertical padding so the depth lines join up into
-   continuous verticals instead of reading as a column of dashes. */
+/* The rail cancels the row's vertical padding so depth reads as continuous
+   verticals rather than a column of dashes. */
 .lao-rail { display: flex; align-self: stretch; flex: none; margin: -7px 0; }
 .lao-rail i {
   width: 11px; align-self: stretch;
@@ -861,7 +683,6 @@ svg { display: block; flex: none; }
 .lao-h-level {
   font-family: var(--lao-mono);
   font-size: var(--lao-size-micro); font-weight: 700;
-  letter-spacing: 0.02em;
   padding: 3px 5px; border-radius: 5px;
   background: var(--lao-surface-sunken);
   color: var(--lao-text-muted);
@@ -875,36 +696,52 @@ svg { display: block; flex: none; }
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: var(--lao-size-meta);
 }
-.lao-h[data-empty="true"] .lao-h-text { color: var(--lao-text-faint); font-style: italic; }
-
 .lao-h-flag {
   font-size: var(--lao-size-micro); font-weight: 600;
   padding: 2px 6px; border-radius: var(--lao-r-pill);
   white-space: nowrap; flex: none;
+  background: var(--lao-warning-wash); color: var(--lao-warning);
 }
 .lao-h-flag[data-sev="critical"] { background: var(--lao-critical-wash); color: var(--lao-critical); }
-.lao-h-flag[data-sev="warning"]  { background: var(--lao-warning-wash); color: var(--lao-warning); }
 .lao-h-flag[data-sev="notice"]   { background: var(--lao-notice-wash); color: var(--lao-notice); }
 
-/* Empty state within a lens ------------------------------------------------ */
+/* -------------------------------------------------------- keyboard path */
 
-.lao-lens-clear {
-  display: flex; flex-direction: column; align-items: center; text-align: center;
-  gap: var(--lao-s3); padding: var(--lao-s7) var(--lao-s6);
+.lao-path-list { display: grid; gap: 1px; border-radius: var(--lao-r-sm); overflow: hidden; }
+.lao-path-row {
+  display: grid; grid-template-columns: auto 1fr auto;
+  align-items: center; gap: var(--lao-s2);
+  width: 100%;
+  padding: 8px var(--lao-s2);
+  background: var(--lao-surface-sunken);
+  font-size: var(--lao-size-meta);
+  transition: background var(--lao-t-micro) var(--lao-ease-out);
 }
-.lao-lens-clear svg { color: var(--lao-brand); }
-.lao-lens-clear b { font-size: var(--lao-size-lead); font-weight: 600; letter-spacing: -0.012em; }
-.lao-lens-clear p { font-size: var(--lao-size-meta); color: var(--lao-text-muted); max-width: 28ch; }
+.lao-path-row:hover { background: var(--lao-surface-active); }
+.lao-path-num {
+  min-width: 20px; height: 20px; padding: 0 5px;
+  display: grid; place-items: center;
+  border-radius: var(--lao-r-pill);
+  background: var(--lao-brand); color: var(--lao-focus-contrast);
+  font-size: var(--lao-size-micro); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.lao-path-name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--lao-text-muted);
+}
+.lao-unnamed { font-style: italic; opacity: 0.9; }
 
 /* ------------------------------------------------------------------ footer */
 
 .lao-foot {
   flex: none;
   display: flex; align-items: center; justify-content: space-between; gap: var(--lao-s3);
-  padding: 10px var(--lao-s3) 10px var(--lao-s4);
+  padding: 8px var(--lao-s2) 8px var(--lao-s4);
   border-top: 1px solid var(--lao-line);
   background: var(--lao-surface-sunken);
 }
+.lao-foot-actions { display: flex; align-items: center; gap: 2px; flex: none; }
 .lao-status {
   font-size: var(--lao-size-micro);
   color: var(--lao-text-faint);
@@ -913,12 +750,11 @@ svg { display: block; flex: none; }
   min-width: 0;
 }
 .lao-status span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lao-dot {
+.lao-dot-live {
   width: 5px; height: 5px; border-radius: 50%;
   background: var(--lao-brand); flex: none;
-  transition: background var(--lao-t-base) var(--lao-ease-out);
 }
-:host([data-scanning="true"]) .lao-dot { animation: lao-pulse 1.4s var(--lao-ease-soft) infinite; }
+:host([data-scanning="true"]) .lao-dot-live { animation: lao-pulse 1.4s var(--lao-ease-soft) infinite; }
 @keyframes lao-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 
 /* ================================================================ overlay */
@@ -931,38 +767,25 @@ svg { display: block; flex: none; }
 
 /* --- The signature: corner brackets, not a box ---------------------------- */
 
+/* Exactly one of these exists at a time. Marking every finding at once is what
+   made the first version overwhelming: it turned the page into a wall of
+   brackets and said nothing about where to begin. */
 .lao-mk {
   position: absolute;
   pointer-events: none;
   --c: var(--lao-critical-mark);
-  --len: 11px;
-  --w: 1.5px;
-  animation: lao-mk-in var(--lao-t-base) var(--lao-ease-soft) both;
+  --len: 16px;
+  --w: 2px;
 }
-.lao-mk[data-sev="warning"] { --c: var(--lao-warning-mark); }
-.lao-mk[data-sev="notice"]  { --c: var(--lao-notice-mark); }
-.lao-mk[data-sev="clear"]   { --c: var(--lao-brand); }
+.lao-mk[data-tier="check"] { --c: var(--lao-warning-mark); }
+.lao-mk[data-tier="none"]  { --c: var(--lao-brand); }
 
-/* The entrance animates opacity only. A running animation wins over inline
-   styles, so animating transform here would permanently override the
-   positioning transform set each frame — the scale flourish lives on the inner
-   frame instead, which nothing else transforms. */
-@keyframes lao-mk-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes lao-frame-in {
-  from { transform: scale(1.035); }
-  to   { transform: none; }
-}
-
-/* Eight gradient slices draw four L-shaped corners in a single element, so a
-   page with hundreds of findings still paints in one pass. The halo is a
-   drop-shadow on the alpha, which means it hugs the brackets rather than
+/* Eight gradient slices draw four L-shaped corners in a single element. The
+   halo is a drop-shadow on the alpha, so it hugs the brackets rather than
    outlining a rectangle. */
 .lao-mk-frame {
   position: absolute; inset: 0;
-  border-radius: 3px;
+  border-radius: 4px;
   background-repeat: no-repeat;
   background-image:
     linear-gradient(var(--c), var(--c)), linear-gradient(var(--c), var(--c)),
@@ -982,74 +805,52 @@ svg { display: block; flex: none; }
   filter:
     drop-shadow(0 0 0.5px var(--lao-marker-halo))
     drop-shadow(0 0 2px var(--lao-marker-halo));
-  transition: background-size var(--lao-t-base) var(--lao-ease-soft),
-              opacity var(--lao-t-base) var(--lao-ease-out);
-  animation: lao-frame-in var(--lao-t-base) var(--lao-ease-soft) both;
 }
 
-/* A tinted wash only appears on hover/selection, so a busy page stays readable. */
 .lao-mk-fill {
   position: absolute; inset: 0;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--c);
-  opacity: 0;
-  transition: opacity var(--lao-t-base) var(--lao-ease-out);
+  opacity: 0.08;
 }
 
-.lao-mk[data-hover="true"] .lao-mk-frame,
-.lao-mk[data-selected="true"] .lao-mk-frame { --len: 16px; --w: 2px; }
-.lao-mk[data-hover="true"] .lao-mk-fill { opacity: 0.07; }
-.lao-mk[data-selected="true"] .lao-mk-fill { opacity: 0.11; }
-
-.lao-mk[data-selected="true"] { z-index: 3; }
-.lao-mk[data-dim="true"] { opacity: 0.28; }
-
-/* Badge: a small tab hanging off the top-left corner. */
+/* A plain-language caption, not a ratio. Whoever is reading it already has the
+   full explanation in the panel; this only has to say which thing is meant. */
+/* Right-aligned above the frame. Whatever sits above a marked block is almost
+   always left-aligned and narrower than it — a heading, a previous paragraph —
+   so the top-right corner is usually empty space. Left-aligning it collided
+   with the heading above on the very first page tried. */
 .lao-mk-badge {
   position: absolute;
-  bottom: 100%; left: -1px;
-  margin-bottom: 3px;
-  pointer-events: auto;
-  display: flex; align-items: center; gap: 4px;
-  height: 17px; padding: 0 5px;
-  border-radius: 5px;
+  bottom: 100%; right: -2px;
+  margin-bottom: 5px;
+  max-width: min(340px, 60vw);
+  display: block;
+  padding: 4px 9px;
+  border-radius: 7px;
   background: var(--c);
   color: #fff;
   font-family: var(--lao-font);
-  font-size: 10px; font-weight: 700;
-  letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.28), 0 0 0 1px var(--lao-marker-halo);
-  cursor: pointer;
-  transform-origin: 0 100%;
-  transition: transform var(--lao-t-micro) var(--lao-ease-out),
-              box-shadow var(--lao-t-micro) var(--lao-ease-out);
+  font-size: 11.5px; font-weight: 600;
+  letter-spacing: -0.005em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.22), 0 0 0 1px var(--lao-marker-halo);
 }
-.lao-mk-badge:hover { transform: scale(1.06); box-shadow: 0 2px 6px rgba(0,0,0,0.32), 0 0 0 1px var(--lao-marker-halo); }
-.lao-mk-badge:active { transform: scale(0.97); }
-/* Ochre needs dark text to stay legible; the others carry white. */
-.lao-mk[data-sev="warning"] .lao-mk-badge { color: #2A1B00; }
+.lao-mk[data-tier="check"] .lao-mk-badge { color: #2A1B00; }
 
-/* Severity meter inside the badge, echoing the panel's glyph exactly. */
-.lao-mk-meter { display: flex; align-items: center; gap: 1.5px; flex: none; }
-.lao-mk-meter i { display: block; width: 2px; height: 8px; border-radius: 1px; background: currentColor; }
-.lao-mk-meter i[data-on="false"] { opacity: 0.38; }
+/* Near the top of the viewport there is nothing above to hang from. */
+.lao-mk[data-flip="true"] .lao-mk-badge { bottom: auto; top: calc(100% + 5px); }
 
-/* The metric is revealed on hover — the page stays quiet until asked. */
-.lao-mk-metric {
-  display: inline-block;
-  max-width: 0; overflow: hidden;
-  opacity: 0;
-  transition: max-width var(--lao-t-base) var(--lao-ease-soft),
-              opacity var(--lao-t-micro) var(--lao-ease-out),
-              margin var(--lao-t-base) var(--lao-ease-soft);
+/* The entrance animates opacity only. A running animation wins over inline
+   styles, so animating transform here would permanently override the
+   positioning transform written every frame. */
+.lao-mk--in { animation: lao-mk-in 240ms var(--lao-ease-soft) both; }
+.lao-mk--in .lao-mk-frame { animation: lao-frame-in 240ms var(--lao-ease-soft) both; }
+@keyframes lao-mk-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lao-frame-in {
+  from { transform: scale(1.03); }
+  to   { transform: none; }
 }
-.lao-mk[data-hover="true"] .lao-mk-metric,
-.lao-mk[data-selected="true"] .lao-mk-metric { max-width: 170px; opacity: 1; }
-
-/* When a marker sits at the very top of the viewport, flip the badge inside. */
-.lao-mk[data-flip="true"] .lao-mk-badge { bottom: auto; top: 2px; left: 2px; margin: 0; }
 
 /* --- Tab order path ------------------------------------------------------- */
 
@@ -1114,22 +915,6 @@ svg { display: block; flex: none; }
 .lao-node[data-flag="true"] { background: var(--lao-warning-mark); color: #2A1B00; }
 .lao-node[data-flag="critical"] { background: var(--lao-critical-mark); color: #fff; }
 
-/* --- On-page pulse when jumping to an element ----------------------------- */
-
-.lao-pulse {
-  position: absolute;
-  left: 0; top: 0;
-  border-radius: 5px;
-  border: 2px solid var(--lao-brand);
-  pointer-events: none;
-  animation: lao-pulse-ring 1200ms var(--lao-ease-soft) forwards;
-}
-@keyframes lao-pulse-ring {
-  0%   { opacity: 0; transform: scale(1.04); }
-  18%  { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.01); }
-}
-
 /* ============================================== reduced motion / contrast */
 
 /* Motion is removed, not merely shortened — including the decorative flow and
@@ -1144,9 +929,7 @@ svg { display: block; flex: none; }
   .lao-clear-mark::before { animation: none; opacity: 0.75; transform: scale(0.82); }
   .lao-clear-mark::after { animation: none; opacity: 0.4; }
   :host([data-scanning="true"]) .lao-dot { animation: none; opacity: 0.5; }
-  .lao-mk, .lao-node { animation: none; }
-  .lao-pulse { animation: lao-pulse-static 1200ms steps(1) forwards; }
-  @keyframes lao-pulse-static { 0%, 90% { opacity: 1; } 100% { opacity: 0; } }
+  .lao-mk--in, .lao-mk--in .lao-mk-frame, .lao-node { animation: none; }
   * { transition-duration: 1ms !important; }
 }
 
@@ -1155,9 +938,7 @@ svg { display: block; flex: none; }
 @media (forced-colors: active) {
   .lao-panel { border: 1px solid CanvasText; }
   .lao-mk-frame { forced-color-adjust: none; }
-  .lao-switch { border: 1px solid CanvasText; }
-  .lao-switch[aria-checked="true"] { background: Highlight; }
-  .lao-card, .lao-fix-row, .lao-occurrence { border: 1px solid CanvasText; }
+  .lao-swap, .lao-places, .lao-sample, .lao-path-row { border: 1px solid CanvasText; }
   :where(button, [tabindex]):focus-visible { outline: 2px solid Highlight; }
 }
 `;

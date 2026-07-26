@@ -1,10 +1,13 @@
 /**
  * The on-page marker layer.
  *
- * Markers are positioned in viewport coordinates and re-read from the live
- * elements on every frame that scroll/resize dirties, which keeps them glued to
- * sticky headers, transformed containers and virtualised lists — all the places
- * a one-shot absolute-positioned overlay drifts.
+ * Deliberately shows one thing at a time. Marking every finding at once turns
+ * the page into a wall of brackets and tells you nothing about where to start —
+ * so the default state is empty, and exactly one element is marked: the one the
+ * user is looking at right now.
+ *
+ * The keyboard path is the single exception, because a route is meaningless
+ * unless you can see the whole of it. It is opt-in and never on by default.
  */
 (() => {
   const LAO = (globalThis.__LAO__ ||= {});
@@ -14,15 +17,14 @@
   const CULL_PAD = 300;
 
   class Overlay {
-    constructor(root, { onSelect } = {}) {
-      this.onSelect = onSelect || (() => {});
+    constructor(root, { onSelectStep } = {}) {
+      this.onSelectStep = onSelectStep || (() => {});
 
       this.layer = document.createElement('div');
       this.layer.className = 'lao-layer';
-      // The marker layer is decoration over content that is already in the
-      // accessibility tree; issues are reachable as real controls in the panel,
-      // so exposing several hundred duplicate buttons here would only bloat the
-      // very tree we are asking authors to keep clean.
+      // Decoration over content that is already in the accessibility tree. Every
+      // finding is reachable as a real control in the panel, so duplicating them
+      // here would only bloat the tree we ask authors to keep clean.
       this.layer.setAttribute('aria-hidden', 'true');
 
       this.pathSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -32,16 +34,15 @@
 
       root.appendChild(this.layer);
 
-      this.markers = new Map(); // id -> { issue, el, frame } — mounted only
-      this.issueList = [];      // every active issue, mounted or not
-      this.nodes = new Map();   // tab index -> element
+      this.marker = null;      // The single focused marker, when there is one.
+      this.target = null;
+      this.tabSteps = [];
+      this.nodes = new Map();
       this.segments = [];
-      this.data = { contrast: [], images: [], headings: [], tabs: { steps: [], issues: [] } };
-      this.lenses = { contrast: true, headings: true, images: true, tabs: false };
-      this.selectedId = null;
+      this.showTabPath = false;
 
-      this._frame = 0;
       this._dirty = false;
+      this._frame = 0;
       this._onScroll = () => this.invalidate();
       addEventListener('scroll', this._onScroll, { passive: true, capture: true });
       addEventListener('resize', this._onScroll, { passive: true });
@@ -55,106 +56,81 @@
       this.layer.remove();
     }
 
-    setLenses(lenses) {
-      this.lenses = lenses;
-      this.render();
-    }
+    /* --------------------------------------------------------- single mark */
 
-    setData(data) {
-      this.data = data;
-      this.render();
-    }
+    /**
+     * Mark one element and bring it into view. `tier` picks the colour;
+     * `label` is the short caption shown beside the brackets.
+     */
+    focus(element, tier = 'fix', label = '') {
+      if (!element?.isConnected) return this.clear();
 
-    select(id) {
-      this.selectedId = id;
-      for (const [key, entry] of this.markers) {
-        entry.el.dataset.selected = String(key === id);
-        entry.el.dataset.dim = String(!!id && key !== id);
+      this.target = element;
+      if (!this.marker) {
+        this.marker = document.createElement('div');
+        this.marker.className = 'lao-mk';
+        this.marker.append(
+          Object.assign(document.createElement('div'), { className: 'lao-mk-fill' }),
+          Object.assign(document.createElement('div'), { className: 'lao-mk-frame' }),
+        );
+        this.caption = document.createElement('div');
+        this.caption.className = 'lao-mk-badge';
+        this.marker.appendChild(this.caption);
+        this.layer.appendChild(this.marker);
       }
+
+      this.marker.dataset.tier = tier;
+      this.caption.textContent = util.truncate(label, 46);
+      this.caption.hidden = !label;
+
+      // Retrigger the entrance so moving between issues reads as a new mark
+      // rather than the old one silently teleporting.
+      this.marker.classList.remove('lao-mk--in');
+      void this.marker.offsetWidth;
+      this.marker.classList.add('lao-mk--in');
+
+      this._scrollTo(element);
       this.invalidate();
     }
 
-    /* ------------------------------------------------------------ rendering */
-
-    /** Markers currently eligible to appear, given which lenses are on. */
-    activeIssues() {
-      const { contrast = [], images = [], headings = [] } = this.data;
-      const out = [];
-      if (this.lenses.contrast) out.push(...contrast);
-      if (this.lenses.images) out.push(...images);
-      // Heading problems are marked on the page too, so the outline and the
-      // page agree, but only the ones that are actually a problem.
-      if (this.lenses.headings) out.push(...headings.filter((h) => h.rect && h.element));
-      return out.filter((i) => i.element && i.element.isConnected);
+    clear() {
+      this.target = null;
+      if (this.marker) {
+        this.marker.remove();
+        this.marker = null;
+        this.caption = null;
+      }
     }
 
-    /**
-     * Markers are virtualised: the element for an issue is only in the DOM
-     * while that issue is near the viewport. A page with a thousand findings
-     * would otherwise put several thousand nodes in the shadow root and read a
-     * rect for each one on every scroll frame.
-     */
-    render() {
-      this.issueList = this.activeIssues();
-      const wanted = new Set(this.issueList.map((i) => i.id));
+    _scrollTo(element) {
+      const r = element.getBoundingClientRect();
+      const margin = 120;
+      const alreadyVisible = r.top >= margin && r.bottom <= innerHeight - margin;
+      if (alreadyVisible) return;
+      element.scrollIntoView({
+        behavior: util.prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'center',
+        inline: 'nearest',
+      });
+    }
 
-      for (const [id, entry] of this.markers) {
-        if (!wanted.has(id)) {
-          entry.el.remove();
-          this.markers.delete(id);
-        }
-      }
+    /* ------------------------------------------------------- keyboard path */
 
+    setTabPath(on, steps = []) {
+      this.showTabPath = on;
+      this.tabSteps = on ? steps : [];
       this._renderTabs();
       this.invalidate();
     }
 
-    _createMarker(id, issue) {
-      const el = document.createElement('div');
-      el.className = 'lao-mk';
-      el.dataset.sev = issue.severity || 'notice';
-      el.dataset.selected = String(this.selectedId === id);
-      el.dataset.dim = String(!!this.selectedId && this.selectedId !== id);
-
-      const fill = document.createElement('div');
-      fill.className = 'lao-mk-fill';
-
-      const frame = document.createElement('div');
-      frame.className = 'lao-mk-frame';
-
-      const badge = document.createElement('button');
-      badge.type = 'button';
-      badge.className = 'lao-mk-badge';
-      badge.tabIndex = -1; // Reachable by pointer; the panel is the keyboard path.
-      badge.innerHTML =
-        `<span class="lao-mk-meter">${meterGlyph(issue.severity)}</span>` +
-        `<span class="lao-mk-metric">${escape(shortMetric(issue))}</span>`;
-
-      badge.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.onSelect(issue);
-      });
-
-      el.append(fill, frame, badge);
-      el.addEventListener('pointerenter', () => { el.dataset.hover = 'true'; });
-      el.addEventListener('pointerleave', () => { el.dataset.hover = 'false'; });
-      badge.addEventListener('pointerenter', () => { el.dataset.hover = 'true'; });
-
-      this.layer.appendChild(el);
-      return { issue, el, frame, badge };
-    }
-
     _renderTabs() {
-      // Clear previous tab layer content.
       for (const node of this.nodes.values()) node.remove();
       this.nodes.clear();
       this.pathSvg.replaceChildren();
       this.segments = [];
+      if (!this.showTabPath) return;
 
-      if (!this.lenses.tabs) return;
-
-      const steps = this.data.tabs.steps || [];
+      const steps = this.tabSteps;
       steps.forEach((step) => {
         if (!step.el?.isConnected) return;
         const node = document.createElement('button');
@@ -167,7 +143,7 @@
         node.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          this.onSelect({ ...step, lens: 'tabs', id: step.id });
+          this.onSelectStep(step);
         });
         this.layer.appendChild(node);
         this.nodes.set(step.index, node);
@@ -176,13 +152,10 @@
       for (let i = 1; i < steps.length; i++) {
         const backward = !!steps[i].backward;
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        // Backward segments are dashed as well as differently coloured, so the
-        // distinction survives colour blindness and greyscale screenshots.
         if (backward) path.dataset.backward = 'true';
 
-        // An arrowhead at the midpoint states the direction outright. A
-        // travelling dash only reads while it is moving, which is no use in the
-        // screenshot someone actually shares.
+        // An arrowhead states direction outright; a travelling dash only reads
+        // while it moves, which is no use in a screenshot or under reduced motion.
         const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         arrow.setAttribute('class', 'lao-arrow');
         arrow.setAttribute('d', 'M0 0 L-6 -3.4 L-6 3.4 Z');
@@ -193,7 +166,7 @@
       }
     }
 
-    /* -------------------------------------------------------- positioning */
+    /* ---------------------------------------------------------- positioning */
 
     invalidate() {
       if (this._dirty) return;
@@ -207,66 +180,39 @@
     }
 
     _position() {
-      const vw = innerWidth;
       const vh = innerHeight;
+      const vw = innerWidth;
       const inView = (r) =>
         r.bottom > -CULL_PAD && r.top < vh + CULL_PAD &&
         r.right > -CULL_PAD && r.left < vw + CULL_PAD;
 
-      /* Pass 1 — read every rect, touching no styles.
-         Interleaving reads and writes forces a synchronous layout per marker,
-         which is the difference between a smooth scroll and a locked tab on a
-         page with hundreds of findings. */
-      const measured = [];
-      for (const issue of this.issueList || []) {
-        const target = issue.element;
-        if (!target?.isConnected) continue;
-        const r = target.getBoundingClientRect();
-        if (r.width === 0 || r.height === 0) continue;
-        if (!inView(r)) continue;
-        measured.push({ issue, r });
-      }
+      /* Read pass. Interleaving reads with style writes forces a synchronous
+         layout per element, which is what makes an overlay stutter on scroll. */
+      const markRect = this.target?.isConnected ? this.target.getBoundingClientRect() : null;
 
-      const steps = this.data.tabs.steps || [];
+      const steps = this.tabSteps;
       const stepRects = new Map();
-      for (const [index, node] of this.nodes) {
+      for (const index of this.nodes.keys()) {
         const target = steps[index - 1]?.el;
         if (!target?.isConnected) { stepRects.set(index, null); continue; }
         const r = target.getBoundingClientRect();
         stepRects.set(index, inView(r) ? r : null);
-        void node;
       }
-
       const segRects = this.segments.map((seg) => ({
-        seg,
-        a: anchor(seg.from.el),
-        b: anchor(seg.to.el),
+        seg, a: anchor(seg.from.el), b: anchor(seg.to.el),
       }));
 
-      /* Pass 2 — mount, unmount and write, reading nothing. */
-      const live = new Set();
-      for (const { issue, r } of measured) {
-        live.add(issue.id);
-        let entry = this.markers.get(issue.id);
-        if (!entry) {
-          entry = this._createMarker(issue.id, issue);
-          this.markers.set(issue.id, entry);
+      /* Write pass. */
+      if (this.marker) {
+        if (!markRect || (markRect.width === 0 && markRect.height === 0)) {
+          this.marker.style.display = 'none';
         } else {
-          entry.issue = issue;
-        }
-        const { el } = entry;
-        // Inflate slightly so the brackets sit just outside the text, not on it.
-        el.style.transform = `translate(${Math.round(r.left - 3)}px, ${Math.round(r.top - 3)}px)`;
-        el.style.width = `${Math.round(r.width + 6)}px`;
-        el.style.height = `${Math.round(r.height + 6)}px`;
-        el.dataset.flip = String(r.top < 26);
-      }
-
-      // Anything that scrolled out of range leaves the DOM entirely.
-      for (const [id, entry] of this.markers) {
-        if (!live.has(id)) {
-          entry.el.remove();
-          this.markers.delete(id);
+          this.marker.style.display = '';
+          this.marker.style.transform =
+            `translate(${Math.round(markRect.left - 4)}px, ${Math.round(markRect.top - 4)}px)`;
+          this.marker.style.width = `${Math.round(markRect.width + 8)}px`;
+          this.marker.style.height = `${Math.round(markRect.height + 8)}px`;
+          this.marker.dataset.flip = String(markRect.top < 34);
         }
       }
 
@@ -282,54 +228,21 @@
       for (const { seg, a, b } of segRects) {
         const hide = () => {
           seg.path.removeAttribute('d');
-          seg.arrow.removeAttribute('transform');
           seg.arrow.style.display = 'none';
         };
         if (!a || !b) { hide(); continue; }
-        const offscreen =
-          (a.y < -CULL_PAD && b.y < -CULL_PAD) || (a.y > vh + CULL_PAD && b.y > vh + CULL_PAD);
-        if (offscreen) { hide(); continue; }
-
+        if ((a.y < -CULL_PAD && b.y < -CULL_PAD) || (a.y > vh + CULL_PAD && b.y > vh + CULL_PAD)) {
+          hide();
+          continue;
+        }
         const { d, mid, angle, length } = curve(a, b);
         seg.path.setAttribute('d', d);
-        // On a very short hop the arrow would be bigger than the line itself.
-        if (length < 26) {
-          seg.arrow.style.display = 'none';
-        } else {
+        if (length < 26) seg.arrow.style.display = 'none';
+        else {
           seg.arrow.style.display = '';
           seg.arrow.setAttribute('transform', `translate(${mid.x} ${mid.y}) rotate(${angle})`);
         }
       }
-    }
-
-    /* ------------------------------------------------------------- effects */
-
-    /** Scroll an element into view and ring it once, so the eye can find it. */
-    reveal(element) {
-      if (!element?.isConnected) return;
-      const reduced = util.prefersReducedMotion();
-      element.scrollIntoView({
-        behavior: reduced ? 'auto' : 'smooth',
-        block: 'center',
-        inline: 'nearest',
-      });
-
-      const draw = () => {
-        const r = element.getBoundingClientRect();
-        const ring = document.createElement('div');
-        ring.className = 'lao-pulse';
-        ring.style.left = `${r.left - 4}px`;
-        ring.style.top = `${r.top - 4}px`;
-        ring.style.width = `${r.width + 8}px`;
-        ring.style.height = `${r.height + 8}px`;
-        this.layer.appendChild(ring);
-        setTimeout(() => ring.remove(), 1300);
-        this.invalidate();
-      };
-
-      // Let the smooth scroll land before drawing, so the ring is not left behind.
-      if (reduced) draw();
-      else setTimeout(draw, 320);
     }
   }
 
@@ -342,64 +255,31 @@
     return { x: r.left, y: r.top };
   }
 
-  /**
-   * A gentle S-curve rather than a straight line: it makes crossing paths
-   * separable by eye, and reads as a route rather than a wireframe connector.
-   */
+  /** A gentle bow, so crossing routes stay separable by eye. */
   function curve(a, b) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const dist = Math.hypot(dx, dy);
-    if (dist < 4) {
-      return { d: `M${a.x} ${a.y}`, mid: a, angle: 0, length: 0 };
-    }
+    if (dist < 4) return { d: `M${a.x} ${a.y}`, mid: a, angle: 0, length: 0 };
 
     const bend = Math.min(dist * 0.28, 46);
-    // Bow perpendicular to the travel direction.
     const nx = -dy / dist;
     const ny = dx / dist;
     const cx = a.x + dx / 2 + nx * bend;
     const cy = a.y + dy / 2 + ny * bend;
 
-    // Quadratic Bézier at t=0.5, and its tangent (which is simply b - a).
-    const mid = { x: 0.25 * a.x + 0.5 * cx + 0.25 * b.x, y: 0.25 * a.y + 0.5 * cy + 0.25 * b.y };
-    const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-
     return {
       d: `M${round(a.x)} ${round(a.y)} Q${round(cx)} ${round(cy)} ${round(b.x)} ${round(b.y)}`,
-      mid: { x: round(mid.x), y: round(mid.y) },
-      angle: round(angle),
+      mid: {
+        x: round(0.25 * a.x + 0.5 * cx + 0.25 * b.x),
+        y: round(0.25 * a.y + 0.5 * cy + 0.25 * b.y),
+      },
+      angle: round((Math.atan2(dy, dx) * 180) / Math.PI),
       length: dist,
     };
   }
 
   const round = (n) => Math.round(n * 10) / 10;
 
-  /** Three segments, filled by rank — the same glyph the panel uses. */
-  function meterGlyph(severity) {
-    const filled = { critical: 3, warning: 2, notice: 1 }[severity] || 1;
-    return Array.from({ length: 3 }, (_, i) => `<i data-on="${i < filled}"></i>`).join('');
-  }
-
-  /** The one number worth showing before the user asks for detail. */
-  function shortMetric(issue) {
-    if (issue.lens === 'contrast') {
-      if (issue.unmeasurable) return issue.unmeasurable === 'gradient' ? 'gradient' : 'image bg';
-      return `${LAO.color.round(issue.ratio, 2)}:1 · needs ${issue.required}`;
-    }
-    if (issue.lens === 'images') return issue.title || 'alt text';
-    if (issue.lens === 'headings') {
-      const p = issue.problems?.[0];
-      return p ? p.label : `H${issue.level}`;
-    }
-    return issue.title || '';
-  }
-
-  const escape = (s) =>
-    String(s ?? '').replace(/[&<>"']/g, (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
-    );
-
   LAO.Overlay = Overlay;
-  LAO.overlayHelpers = { shortMetric, escape };
 })();

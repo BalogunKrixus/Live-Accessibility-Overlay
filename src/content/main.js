@@ -21,10 +21,8 @@
       this.prefs = {
         theme: 'system',      // system | light | dark
         side: 'right',        // right | left
-        lenses: { contrast: true, headings: true, images: true, tabs: false },
       };
       this.results = null;
-      this.groupOf = new Map(); // issue id -> card id, so a marker opens the right card
       this.isOpen = false;
       this.scanToken = 0;
 
@@ -57,17 +55,18 @@
       (document.body || document.documentElement).appendChild(this.host);
 
       this.overlay = new LAO.Overlay(this.shadow, {
-        onSelect: (issue) => this.focusIssue(issue),
+        onSelectStep: (step) => this.panel.showKeyboard(),
       });
 
       this.panel = new LAO.Panel(this.host, this.shadow, {
         onClose: () => this.close(),
         onRescan: () => this.scan({ announce: true }),
-        onToggleLens: (key) => this.toggleLens(key),
         onCycleTheme: () => this.cycleTheme(),
         onFlipSide: () => this.flipSide(),
-        onReveal: (issue) => this.reveal(issue),
-        onSelect: (id) => this.overlay.select(id),
+        onShowTarget: (element, tier, label) => this.overlay.focus(element, tier, label),
+        onClearMarks: () => this.overlay.clear(),
+        onShowTabPath: (on) =>
+          this.overlay.setTabPath(on, this.results?.tabs.steps || []),
       });
 
       this._applyPrefs();
@@ -79,8 +78,11 @@
       try {
         const stored = await chrome.storage.local.get(STORAGE_KEY);
         const saved = stored?.[STORAGE_KEY];
+        // Only known keys are adopted, so a preference blob written by an older
+        // version cannot reintroduce settings this build no longer has.
         if (saved) {
-          this.prefs = { ...this.prefs, ...saved, lenses: { ...this.prefs.lenses, ...saved.lenses } };
+          if (saved.theme) this.prefs.theme = saved.theme;
+          if (saved.side) this.prefs.side = saved.side;
         }
       } catch {
         /* Storage unavailable; defaults are fine. */
@@ -101,8 +103,6 @@
       else this.host.dataset.theme = this.prefs.theme;
       this.host.dataset.side = this.prefs.side;
       this.panel.setTheme(this.prefs.theme);
-      this.panel.setLenses(this.prefs.lenses);
-      this.overlay.setLenses(this.prefs.lenses);
     }
 
     cycleTheme() {
@@ -115,12 +115,6 @@
     flipSide() {
       this.prefs.side = this.prefs.side === 'right' ? 'left' : 'right';
       this.host.dataset.side = this.prefs.side;
-      this._savePrefs();
-    }
-
-    toggleLens(key) {
-      this.prefs.lenses = { ...this.prefs.lenses, [key]: !this.prefs.lenses[key] };
-      this._applyPrefs();
       this._savePrefs();
     }
 
@@ -153,19 +147,8 @@
       this.results = results;
       this.duration = Math.round(performance.now() - started);
 
-      // Map every contrast issue to the card that represents its colour pair,
-      // so clicking a marker on the page opens the group it belongs to.
-      this.groupOf.clear();
-      for (const group of results.contrast.groups) {
-        for (const issue of group.issues) this.groupOf.set(issue.id, group.key);
-      }
-
-      this.overlay.setData({
-        contrast: results.contrast.issues,
-        images: results.images.issues,
-        headings: results.headings.issues.filter((h) => h.element && h.rect),
-        tabs: results.tabs,
-      });
+      // The page stays unmarked until the user picks something to look at.
+      if (this.overlay.showTabPath) this.overlay.setTabPath(true, results.tabs.steps);
 
       this.panel.setScanning(false);
       this.panel.setResults(results);
@@ -201,25 +184,6 @@
       } catch {
         /* Extension context invalidated (reloaded); harmless. */
       }
-    }
-
-    /* ------------------------------------------------------------ selection */
-
-    /** A marker was clicked: open the matching lens and card. */
-    focusIssue(issue) {
-      const lens = issue.lens;
-      const cardId = lens === 'contrast' ? this.groupOf.get(issue.id) || issue.id : issue.id;
-      this.panel.state.expanded.add(cardId);
-      this.panel.showDetail(lens);
-      this.overlay.select(issue.id);
-    }
-
-    /** A panel row was activated: scroll to the element and ring it. */
-    reveal(issue) {
-      const element = issue.element || issue.el;
-      if (!element) return;
-      this.overlay.select(issue.id || null);
-      this.overlay.reveal(element);
     }
 
     /* --------------------------------------------------------- live updates */
@@ -269,7 +233,8 @@
       if (!this.isOpen) return;
       this.isOpen = false;
       this.panel.close();
-      this.overlay.setLenses({ contrast: false, headings: false, images: false, tabs: false });
+      this.overlay.clear();
+      this.overlay.setTabPath(false);
       this._reportBadge();
 
       // Let the close transition finish before the layer stops painting.
@@ -291,7 +256,6 @@
       if (this.isOpen) this.close();
       else {
         this.host.style.display = '';
-        this.overlay.setLenses(this.prefs.lenses);
         this.open();
       }
     }

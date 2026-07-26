@@ -1,25 +1,22 @@
 /**
  * The panel.
  *
- * Everything user-visible is built with real elements and textContent — page
- * content (heading text, alt values, class names) is never interpolated into
- * markup, so a page cannot inject anything into the tool inspecting it.
+ * Structured like a spell-checker rather than a dashboard: a list of problems
+ * in plain words, and a screen that walks through them one at a time. There are
+ * no lens toggles and no numbers on the surface — every measurement, selector
+ * and WCAG reference lives behind a collapsed "Technical details" disclosure,
+ * so a developer can get at it and nobody else has to look at it.
+ *
+ * Page content (heading text, alt values, class names) is only ever set with
+ * textContent, so a page cannot inject markup into the tool inspecting it.
  */
 (() => {
   const LAO = (globalThis.__LAO__ ||= {});
   if (LAO.Panel) return;
 
-  const { util, color, icons } = LAO;
+  const { util, color, icons, copy } = LAO;
 
-  const LENSES = [
-    { key: 'contrast', name: 'Contrast', icon: 'contrast', unit: 'text elements' },
-    { key: 'headings', name: 'Heading map', icon: 'headings', unit: 'headings' },
-    { key: 'images', name: 'Alt text', icon: 'images', unit: 'images' },
-    { key: 'tabs', name: 'Tab order', icon: 'tabs', unit: 'focus stops' },
-  ];
-
-  const SEV_LABEL = { critical: 'Critical', warning: 'Warning', notice: 'Notice' };
-  const RANK = { critical: 3, warning: 2, notice: 1 };
+  const TIER_LABEL = { fix: 'Fix this', check: 'Worth checking' };
 
   /* ------------------------------------------------------- tiny DOM helper */
 
@@ -41,26 +38,20 @@
     return node;
   }
 
-  const meter = (sev) =>
-    el('span', { class: 'lao-meter', data: { sev }, 'aria-hidden': 'true' },
-      el('i'), el('i'), el('i'));
-
-  /* ------------------------------------------------------------------ panel */
-
   class Panel {
     constructor(host, root, handlers) {
       this.host = host;
       this.handlers = handlers;
       this.state = {
         results: null,
-        lenses: { contrast: true, headings: true, images: true, tabs: false },
-        view: 'home',
-        activeLens: null,
-        selectedId: null,
+        items: [],
+        view: 'home',        // home | issue | outline | keyboard
+        activeIndex: -1,
+        placeIndex: 0,
+        techOpen: false,     // Sticky: a developer opens it once, not every time.
         scanning: true,
-        expanded: new Set(),
       };
-      this.lensButtons = new Map();
+      this.rowButtons = new Map();
       this._build(root);
     }
 
@@ -71,76 +62,64 @@
         class: 'lao-panel',
         role: 'dialog',
         'aria-modal': 'false',
-        'aria-label': 'Live Accessibility Overlay',
+        'aria-label': 'Accessibility check',
         tabindex: '-1',
         data: { state: 'closed' },
       });
 
-      /* Header ------------------------------------------------------------ */
       this.themeBtn = el('button', {
-        type: 'button',
-        class: 'lao-icon-btn',
+        type: 'button', class: 'lao-icon-btn',
         on: { click: () => this.handlers.onCycleTheme() },
       });
 
-      this.sideBtn = el('button', {
-        type: 'button',
-        class: 'lao-icon-btn',
-        title: 'Move panel to the other side',
-        'aria-label': 'Move panel to the other side',
-        svg: icons.dock(16),
-        on: { click: () => this.handlers.onFlipSide() },
-      });
-
       const closeBtn = el('button', {
-        type: 'button',
-        class: 'lao-icon-btn',
+        type: 'button', class: 'lao-icon-btn',
         title: 'Close (Esc)',
-        'aria-label': 'Close accessibility overlay',
+        'aria-label': 'Close accessibility check',
         svg: icons.close(16),
         on: { click: () => this.handlers.onClose() },
       });
 
       const head = el('div', { class: 'lao-head' },
         el('div', { class: 'lao-mark' },
-          el('span', { svg: icons.aperture(22), 'aria-hidden': 'true' }),
-          el('span', { class: 'lao-wordmark' },
-            el('b', { text: 'Live Accessibility' }),
-            el('span', { text: 'Overlay' }))),
-        el('div', { class: 'lao-head-actions' }, this.themeBtn, this.sideBtn, closeBtn));
+          el('span', { svg: icons.aperture(21), 'aria-hidden': 'true' }),
+          el('span', { class: 'lao-wordmark' }, el('b', { text: 'Accessibility check' }))),
+        el('div', { class: 'lao-head-actions' }, this.themeBtn, closeBtn));
 
-      /* Views ------------------------------------------------------------- */
       this.homeView = el('section', {
-        class: 'lao-view lao-view--home',
-        'aria-label': 'Overview',
-        tabindex: '-1',
+        class: 'lao-view lao-view--home', 'aria-label': 'What we found', tabindex: '-1',
       });
-      this.detailView = el('section', {
-        class: 'lao-view',
-        'aria-label': 'Issue details',
-        tabindex: '-1',
-        inert: true,
+      this.subView = el('section', {
+        class: 'lao-view', 'aria-label': 'Details', tabindex: '-1', inert: true,
       });
 
-      const track = el('div', { class: 'lao-track' }, this.homeView, this.detailView);
-      const viewport = el('div', { class: 'lao-viewport' }, track);
+      const viewport = el('div', { class: 'lao-viewport' },
+        el('div', { class: 'lao-track' }, this.homeView, this.subView));
 
-      /* Footer ------------------------------------------------------------ */
-      this.statusText = el('span', { text: 'Scanning…' });
+      this.statusText = el('span', { text: 'Checking…' });
       this.status = el('p', {
-        class: 'lao-status',
-        role: 'status',
-        'aria-live': 'polite',
-        'aria-atomic': 'true',
-      }, el('span', { class: 'lao-dot', 'aria-hidden': 'true' }), this.statusText);
+        class: 'lao-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true',
+      }, el('span', { class: 'lao-dot-live', 'aria-hidden': 'true' }), this.statusText);
+
+      this.sideBtn = el('button', {
+        type: 'button', class: 'lao-icon-btn lao-icon-btn--sm',
+        title: 'Move panel to the other side',
+        'aria-label': 'Move panel to the other side',
+        svg: icons.dock(15),
+        on: { click: () => this.handlers.onFlipSide() },
+      });
 
       this.rescanBtn = el('button', {
-        type: 'button',
-        class: 'lao-btn',
+        type: 'button', class: 'lao-icon-btn lao-icon-btn--sm',
+        title: 'Check again',
+        'aria-label': 'Check this page again',
+        svg: icons.refresh(14),
         on: { click: () => this.handlers.onRescan() },
-      }, el('span', { svg: icons.refresh(13), 'aria-hidden': 'true' }), 'Rescan');
+      });
 
-      const foot = el('div', { class: 'lao-foot' }, this.status, this.rescanBtn);
+      const foot = el('div', { class: 'lao-foot' },
+        this.status,
+        el('div', { class: 'lao-foot-actions' }, this.sideBtn, this.rescanBtn));
 
       this.el.append(head, viewport, foot);
       root.appendChild(this.el);
@@ -153,786 +132,535 @@
 
     open() {
       this.el.dataset.state = 'open';
-      // Focus the panel container, not the first control: a screen reader then
-      // announces the dialog's name and role before any button label.
       requestAnimationFrame(() => this.el.focus({ preventScroll: true }));
     }
 
-    close() {
-      this.el.dataset.state = 'closed';
-    }
+    close() { this.el.dataset.state = 'closed'; }
 
     _onKeydown(e) {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        // Escape unwinds one level at a time rather than discarding the session.
-        if (this.state.view === 'detail') this.showHome();
-        else this.handlers.onClose();
+        if (this.state.view === 'home') this.handlers.onClose();
+        else this.showHome();
+        return;
+      }
+      // Walking the list with the arrow keys is the fastest way through, and it
+      // matches the Prev/Next buttons the mouse gets.
+      if (this.state.view === 'issue' && (e.altKey || e.metaKey)) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); this.step(1); }
+        if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); this.step(-1); }
       }
     }
-
-    /* --------------------------------------------------------------- state */
 
     setScanning(scanning) {
       this.state.scanning = scanning;
       this.host.dataset.scanning = String(scanning);
-      if (scanning) this.statusText.textContent = 'Scanning page…';
+      if (scanning) this.statusText.textContent = 'Checking this page…';
     }
 
-    setTheme(mode) {
-      this._syncThemeButton(mode);
-    }
+    setTheme(mode) { this._syncThemeButton(mode); }
 
     _syncThemeButton(mode) {
       const next = { system: 'light', light: 'dark', dark: 'system' }[mode];
-      const glyph = { system: icons.auto(16), light: icons.sun(16), dark: icons.moon(16) }[mode];
-      this.themeBtn.innerHTML = glyph;
-      const label = `Theme: ${mode === 'system' ? 'follows system' : mode}. Switch to ${next}.`;
+      this.themeBtn.innerHTML =
+        { system: icons.auto(16), light: icons.sun(16), dark: icons.moon(16) }[mode];
+      const label = `Theme: ${mode === 'system' ? 'follows your system' : mode}. Switch to ${next}.`;
       this.themeBtn.setAttribute('aria-label', label);
       this.themeBtn.setAttribute('title', label);
     }
 
     setResults(results) {
       this.state.results = results;
-      this.render();
-    }
-
-    setLenses(lenses) {
-      this.state.lenses = lenses;
-      this.render();
-    }
-
-    /* -------------------------------------------------------------- render */
-
-    render() {
-      if (!this.state.results) return;
+      this.state.items = copy.build(results);
       this._renderHome();
-      if (this.state.view === 'detail' && this.state.activeLens) this._renderDetail();
+      if (this.state.view === 'issue') {
+        // A rescan can change the list under us; fall back to the overview
+        // rather than showing a stale issue.
+        if (!this.state.items[this.state.activeIndex]) this.showHome();
+        else this._renderIssue();
+      } else if (this.state.view === 'outline') this._renderOutline();
+      else if (this.state.view === 'keyboard') this._renderKeyboard();
       this._renderStatus();
     }
 
-    counts() {
-      const r = this.state.results;
-      const per = {
-        contrast: r.contrast.issues,
-        headings: r.headings.issues,
-        images: r.images.issues,
-        tabs: r.tabs.issues,
-      };
-      const summary = {};
-      let total = 0;
-      const bySeverity = { critical: 0, warning: 0, notice: 0 };
-
-      for (const [key, issues] of Object.entries(per)) {
-        // A lens that is switched off still reports its count — hiding the
-        // number would make the toggle feel like it changes the page's quality
-        // rather than what is drawn on it.
-        const sev = { critical: 0, warning: 0, notice: 0 };
-        for (const i of issues) sev[i.severity] = (sev[i.severity] || 0) + 1;
-        summary[key] = { total: issues.length, ...sev, worst: worstOf(issues) };
-        total += issues.length;
-        for (const k of Object.keys(bySeverity)) bySeverity[k] += sev[k];
-      }
-      return { per: summary, total, bySeverity };
-    }
+    /* ---------------------------------------------------------------- home */
 
     _renderHome() {
-      const r = this.state.results;
-      const c = this.counts();
+      const items = this.state.items;
       const frag = document.createDocumentFragment();
+      this.rowButtons.clear();
 
-      if (c.total === 0) {
-        frag.append(this._allClear(r));
+      if (!items.length) {
+        frag.append(this._allClear());
       } else {
-        frag.append(this._summary(c));
+        const h = copy.headline(items);
+        frag.append(el('div', { class: 'lao-hero' },
+          el('h2', { class: 'lao-hero-big', text: h.big }),
+          el('p', { class: 'lao-hero-small', text: h.small })));
+
+        const fix = items.filter((i) => i.tier === 'fix');
+        const check = items.filter((i) => i.tier === 'check');
+        if (fix.length) {
+          frag.append(this._sectionLabel('Fix these'), this._itemList(fix));
+        }
+        if (check.length) {
+          frag.append(this._sectionLabel(fix.length ? 'Worth checking' : 'Worth a look'),
+            this._itemList(check));
+        }
       }
 
-      frag.append(
-        el('h2', { class: 'lao-section-label' }, el('span', { text: 'Lenses' })),
-        this._lensList(c),
-      );
-
-      // The worst few findings, surfaced without a drill-in. Opening a tool and
-      // immediately seeing the actual problem is the whole point; making people
-      // hunt for it through a menu is the thing that makes audits feel like
-      // homework.
-      const top = this._priority();
-      if (top.length) {
-        frag.append(
-          el('h2', { class: 'lao-section-label' }, el('span', { text: 'Start here' })),
-          this._priorityList(top),
-        );
-      }
-
-      // The all-clear state already reports what was checked, so the coverage
-      // strip would just print the same four numbers a second time.
-      if (c.total > 0) frag.append(this._coverage(r));
+      frag.append(this._explore());
       this.homeView.replaceChildren(frag);
     }
 
-    _summary(c) {
-      const total = c.total;
-      const bar = el('div', { class: 'lao-bar', 'aria-hidden': 'true' });
-      for (const sev of ['critical', 'warning', 'notice']) {
-        if (!c.bySeverity[sev]) continue;
-        bar.append(el('i', { data: { sev }, style: `flex-grow:${c.bySeverity[sev]}` }));
-      }
-
-      const legend = el('ul', { class: 'lao-legend' });
-      for (const sev of ['critical', 'warning', 'notice']) {
-        if (!c.bySeverity[sev]) continue;
-        legend.append(el('li', {},
-          meter(sev),
-          el('b', { text: String(c.bySeverity[sev]) }),
-          el('span', { text: SEV_LABEL[sev].toLowerCase() })));
-      }
-
-      return el('div', { class: 'lao-summary' },
-        el('p', { class: 'lao-count' },
-          el('b', { text: String(total) }),
-          el('span', { text: total === 1 ? 'thing to look at' : 'things to look at' })),
-        bar,
-        legend);
+    _sectionLabel(text) {
+      return el('h3', { class: 'lao-section-label' }, el('span', { text }));
     }
 
-    _allClear(r) {
-      const checked = [
-        [r.contrast.scanned, 'text elements'],
-        [r.images.scanned, 'images'],
-        [r.headings.scanned, 'headings'],
-        [r.tabs.scanned, 'focus stops'],
-      ];
-
-      const tallies = el('div', { class: 'lao-tallies' });
-      for (const [n, label] of checked) {
-        tallies.append(el('div', {}, el('b', { text: String(n) }), el('span', { text: label })));
-      }
-
-      return el('div', { class: 'lao-clear' },
-        el('div', { class: 'lao-clear-mark' }, el('span', { svg: icons.apertureOpen(46) })),
-        el('div', {},
-          el('h2', { class: 'lao-clear-title', text: 'Nothing to flag' }),
-          el('p', { text: 'Contrast, headings, alt text and tab order all check out on this page.' })),
-        tallies);
-    }
-
-    _lensList(c) {
-      const list = el('ul', { class: 'lao-lenses' });
-      this.lensButtons.clear();
-
-      for (const lens of LENSES) {
-        const stat = c.per[lens.key];
-        const on = this.state.lenses[lens.key];
-        const tone = stat.total === 0 ? 'clear' : stat.worst;
-        const labelId = `lao-lens-${lens.key}`;
-
-        const openBtn = el('button', {
-          type: 'button',
-          class: 'lao-lens-open',
-          'aria-label':
-            `${lens.name}: ${stat.total === 0 ? `no issues, ${scannedFor(this.state.results, lens.key)} ${lens.unit} checked` : `${stat.total} ${stat.total === 1 ? 'issue' : 'issues'}`}. Open details.`,
-          on: { click: () => this.showDetail(lens.key) },
-        },
-          el('span', { class: 'lao-lens-name', id: labelId, text: lens.name }),
-          el('span', {
-            class: 'lao-lens-meta',
-            text: stat.total === 0
-              ? `${scannedFor(this.state.results, lens.key)} ${lens.unit} · clear`
-              : severityBreakdown(stat),
-          }));
-
-        const toggle = el('button', {
-          type: 'button',
-          class: 'lao-switch',
-          role: 'switch',
-          'aria-checked': String(on),
-          'aria-label': `Draw ${lens.name.toLowerCase()} markers on the page`,
-          on: { click: () => this.handlers.onToggleLens(lens.key) },
-        });
-
-        const row = el('li', { class: 'lao-lens', data: { on: String(on) } },
-          el('span', { class: 'lao-lens-glyph', svg: icons[lens.icon](16), 'aria-hidden': 'true' }),
-          openBtn,
-          el('span', { class: 'lao-tally', data: { sev: tone }, 'aria-hidden': 'true' },
-            stat.total === 0
-              ? el('span', { class: 'lao-tally-clear', svg: icons.check(14) })
-              : el('span', { text: String(stat.total) })),
-          toggle);
-
-        this.lensButtons.set(lens.key, openBtn);
-        list.append(row);
-      }
-      return list;
-    }
-
-    /**
-     * The handful of findings worth looking at first: worst severity wins, and
-     * within a severity the lenses are ordered by how structural the problem is
-     * (a nameless link beats a near-miss contrast ratio).
-     */
-    _priority() {
-      const r = this.state.results;
-      const weight = { images: 3, tabs: 2, headings: 1, contrast: 0 };
-      const pool = [
-        ...r.images.issues,
-        ...r.tabs.issues,
-        ...r.headings.issues,
-        // One row per colour pair, not per element — otherwise a single bad
-        // token would fill this list on its own.
-        ...r.contrast.groups.map((g) => ({ ...g.issues[0], _group: g.key, _count: g.issues.length })),
-      ];
-
-      return pool
-        .filter((i) => i.severity === 'critical' || i.severity === 'warning')
-        .sort((a, b) =>
-          (RANK[b.severity] - RANK[a.severity]) ||
-          (weight[b.lens] - weight[a.lens]))
-        .slice(0, 4);
-    }
-
-    _priorityList(items) {
-      const list = el('ul', { class: 'lao-top' });
-      const lensName = (k) => LENSES.find((l) => l.key === k)?.name ?? k;
-
-      for (const issue of items) {
-        const title = issue.lens === 'contrast' && !issue.unmeasurable
-          ? `${color.round(issue.ratio, 2)}:1 where ${issue.required}:1 is needed`
-          : issue.title || issue.problems?.[0]?.label || 'Issue';
-        const extra = issue._count > 1 ? ` · ${issue._count} elements` : '';
-
-        list.append(el('li', {},
-          el('button', {
-            type: 'button',
-            class: 'lao-top-row',
-            'aria-label': `${SEV_LABEL[issue.severity]}: ${title}. In ${lensName(issue.lens)}. Open details.`,
-            on: {
-              click: () => {
-                const cardId = issue._group || issue.id;
-                this.state.expanded.add(cardId);
-                this.showDetail(issue.lens);
-              },
-            },
-          },
-            meter(issue.severity),
-            el('span', { class: 'lao-top-body' },
-              el('span', { class: 'lao-top-title', text: title }),
-              el('span', { class: 'lao-top-meta', text: `${lensName(issue.lens)}${extra}` })),
-            el('span', { class: 'lao-chevron', svg: icons.chevronRight(13), 'aria-hidden': 'true' }))));
-      }
-      return list;
-    }
-
-    /** What the scan actually looked at — the denominator behind the counts. */
-    _coverage(r) {
-      const bits = [
-        [r.contrast.scanned, 'text elements'],
-        [r.images.scanned, 'images'],
-        [r.headings.scanned, 'headings'],
-        [r.tabs.scanned, 'focus stops'],
-      ];
-      const line = el('p', { class: 'lao-coverage-line' });
-      bits.forEach(([n, label], i) => {
-        if (i) line.append(el('span', { class: 'lao-sep', text: '·', 'aria-hidden': 'true' }));
-        line.append(el('b', { text: String(n) }), document.createTextNode(` ${label}`));
-      });
-      return el('div', { class: 'lao-coverage' },
-        el('span', { class: 'lao-coverage-label', text: 'Checked on this page' }),
-        line);
-    }
-
-    _renderStatus() {
-      const c = this.counts();
-      const parts = [];
-      if (c.total === 0) parts.push('No issues found');
-      else {
-        parts.push(`${c.total} ${c.total === 1 ? 'issue' : 'issues'}`);
-        const bits = ['critical', 'warning', 'notice']
-          .filter((s) => c.bySeverity[s])
-          .map((s) => `${c.bySeverity[s]} ${s}`);
-        if (bits.length > 1) parts.push(`(${bits.join(', ')})`);
-      }
-      this.statusText.textContent = parts.join(' ');
-      this.host.dataset.scanning = 'false';
-    }
-
-    /* ------------------------------------------------------------ navigation */
-
-    showDetail(lensKey) {
-      this.state.activeLens = lensKey;
-      this.state.view = 'detail';
-      this.host.dataset.view = 'detail';
-      this.homeView.setAttribute('inert', '');
-      this.detailView.removeAttribute('inert');
-      this._renderDetail();
-      const lensName = LENSES.find((l) => l.key === lensKey)?.name ?? 'Issue';
-      this.detailView.setAttribute('aria-label', `${lensName} details`);
-      requestAnimationFrame(() => this.detailView.focus({ preventScroll: true }));
-    }
-
-    showHome() {
-      const previous = this.state.activeLens;
-      this.state.view = 'home';
-      this.host.dataset.view = 'home';
-      this.detailView.setAttribute('inert', '');
-      this.homeView.removeAttribute('inert');
-      this.handlers.onSelect(null);
-      requestAnimationFrame(() => {
-        const btn = this.lensButtons.get(previous);
-        btn?.focus({ preventScroll: true });
-      });
-    }
-
-    _renderDetail() {
-      const key = this.state.activeLens;
-      const lens = LENSES.find((l) => l.key === key);
-      const r = this.state.results;
-
-      const back = el('button', {
-        type: 'button',
-        class: 'lao-back',
-        on: { click: () => this.showHome() },
-      }, el('span', { svg: icons.chevronLeft(14), 'aria-hidden': 'true' }), 'Overview');
-
-      this.detailHeading = el('h2', { class: 'lao-detail-title', text: lens.name });
-
-      const header = el('div', { class: 'lao-detail-head' }, back, this.detailHeading);
-
-      let body;
-      if (key === 'contrast') body = this._contrastDetail(r.contrast);
-      else if (key === 'headings') body = this._headingsDetail(r.headings);
-      else if (key === 'images') body = this._imagesDetail(r.images);
-      else body = this._tabsDetail(r.tabs);
-
-      this.detailView.replaceChildren(header, body);
-    }
-
-    /* ----------------------------------------------------- detail: contrast */
-
-    _contrastDetail(result) {
-      if (!result.issues.length) {
-        return this._lensClear(
-          'Every text element passes',
-          `All ${result.scanned} text elements meet WCAG AA for their size and weight.`,
-        );
-      }
-
-      const wrap = el('div', { class: 'lao-issues' });
-
-      for (const group of result.groups) {
-        const first = group.issues[0];
-        const count = group.issues.length;
-
-        const title = first.unmeasurable
-          ? first.title
-          : `${color.round(first.ratio, 2)}:1 against ${first.required}:1`;
-        const sub = first.unmeasurable
-          ? first.detail
-          : `${count} element${count === 1 ? '' : 's'} · ${first.fgHex} on ${first.bgHex}`;
-
-        wrap.append(this._card({
-          id: group.key,
-          severity: group.severity,
-          title,
-          sub,
-          build: () => this._contrastCardBody(group),
-        }));
-      }
-      return wrap;
-    }
-
-    _contrastCardBody(group) {
-      const first = group.issues[0];
-      const parts = [el('p', { class: 'lao-prose', text: first.detail })];
-
-      if (!first.unmeasurable) {
-        // The pair, shown as it actually appears — the sample is the evidence.
-        // The swatch renders the real pairing as evidence. It deliberately
-        // carries no caption: any label inside it would inherit the failing
-        // colours, and an accessibility tool must not print unreadable text.
-        // The hex values live in the card subtitle instead.
-        parts.push(el('div', { class: 'lao-pair' },
-          el('div', {
-            class: 'lao-pair-sample',
-            style: `background:${first.bgHex};color:${first.fgHex}`,
-          },
-            el('b', { text: 'Sample text' })),
-          el('div', { class: 'lao-ratio' },
-            el('b', { text: `${color.round(first.ratio, 2)}` }),
-            el('span', { text: `needs ${first.required}` }))));
-
-        if (first.assumedBackground) {
-          parts.push(el('p', {
-            class: 'lao-prose',
-            text: 'No opaque background was found behind this text, so it was measured against the page canvas.',
-          }));
-        }
-
-        parts.push(this._fixBlock(first));
-      }
-
-      parts.push(this._occurrences(group.issues));
-      return parts;
-    }
-
-    _fixBlock(issue) {
-      const fix = issue.fix;
-      const block = el('div', { class: 'lao-fix' });
-      block.append(el('h3', { class: 'lao-section-label', style: 'padding:0 0 2px', text: 'Closest passing colour' }));
-
-      const candidates = [
-        fix.text?.changed && { label: 'Change the text', c: fix.text, moving: 'text' },
-        // Never offer to repaint the page canvas — "make the whole page dark
-        // grey" is arithmetically correct and useless as advice.
-        !issue.assumedBackground && fix.background?.changed &&
-          { label: 'Change the background', c: fix.background, moving: 'bg' },
-      ].filter(Boolean);
-
-      // Show the closest fix, and the alternative only when it is genuinely
-      // comparable. A suggestion that moves the colour three times as far is
-      // not a choice, it is noise.
-      candidates.sort((a, b) => a.c.delta - b.c.delta);
-      const rows = candidates.filter((r, i) => i === 0 || r.c.delta <= candidates[0].c.delta * 1.6);
-
-      if (!rows.length) {
-        block.append(el('p', {
-          class: 'lao-prose',
-          text: 'No colour at this hue reaches the required ratio. This pairing needs a different hue, not a lighter or darker version of it.',
-        }));
-        return block;
-      }
-
-      for (const row of rows) {
-        const hex = color.toHex(row.c.color);
-        const swatchA = row.moving === 'text' ? hex : issue.fgHex;
-        const swatchB = row.moving === 'text' ? issue.bgHex : hex;
+    _itemList(items) {
+      const list = el('ul', { class: 'lao-items' });
+      for (const item of items) {
+        const places = item.targets.length > 1 ? `${item.targets.length} places` : null;
+        const meta = [item.categoryLabel, places].filter(Boolean).join(' · ');
 
         const btn = el('button', {
           type: 'button',
-          class: 'lao-fix-row',
-          'aria-label': `${row.label} to ${hex}, giving ${color.round(row.c.ratio, 2)} to 1. Copy this colour.`,
-          on: { click: (e) => this._copy(hex, e.currentTarget) },
+          class: 'lao-item',
+          'aria-label': `${TIER_LABEL[item.tier]}: ${item.title}. ${meta}.`,
+          on: { click: () => this.showIssue(item.index) },
         },
-          el('span', { class: 'lao-swatches', 'aria-hidden': 'true' },
-            el('span', { class: 'lao-swatch', style: `background:${swatchB}` }),
-            el('span', { class: 'lao-swatch', style: `background:${swatchA}` })),
-          el('span', { class: 'lao-fix-label' },
-            el('b', { text: row.label }),
-            el('code', { text: hex })),
-          el('span', { class: 'lao-fix-ratio', text: `${color.round(row.c.ratio, 2)}:1` }));
+          el('span', { class: 'lao-dot', data: { tier: item.tier }, 'aria-hidden': 'true' }),
+          el('span', { class: 'lao-item-body' },
+            el('span', { class: 'lao-item-title', text: item.title }),
+            el('span', { class: 'lao-item-meta', text: meta })),
+          el('span', { class: 'lao-chevron', svg: icons.chevronRight(14), 'aria-hidden': 'true' }));
 
-        block.append(btn);
+        this.rowButtons.set(item.index, btn);
+        list.append(el('li', {}, btn));
+      }
+      return list;
+    }
+
+    _allClear() {
+      const r = this.state.results;
+      return el('div', { class: 'lao-clear' },
+        el('div', { class: 'lao-clear-mark' }, el('span', { svg: icons.apertureOpen(46) })),
+        el('div', {},
+          el('h2', { class: 'lao-clear-title', text: 'Nothing to fix' }),
+          el('p', { text: 'We checked the text, images, headings and keyboard order on this page. It all looks good.' })),
+        el('p', {
+          class: 'lao-clear-detail',
+          text: `${r.contrast.scanned} pieces of text · ${r.images.scanned} images · ${r.headings.scanned} headings · ${r.tabs.scanned} keyboard stops`,
+        }));
+    }
+
+    /** The two deeper views, kept out of the main flow so they never demand attention. */
+    _explore() {
+      const wrap = el('div', { class: 'lao-explore' });
+      wrap.append(this._sectionLabel('Take a closer look'));
+
+      const list = el('ul', { class: 'lao-items lao-items--quiet' });
+      for (const [label, hint, action] of [
+        ['Page outline', 'How the headings are structured', () => this.showOutline()],
+        ['Keyboard path', 'The route the Tab key takes', () => this.showKeyboard()],
+      ]) {
+        list.append(el('li', {},
+          el('button', {
+            type: 'button', class: 'lao-item', on: { click: action },
+          },
+            el('span', { class: 'lao-item-body' },
+              el('span', { class: 'lao-item-title', text: label }),
+              el('span', { class: 'lao-item-meta', text: hint })),
+            el('span', { class: 'lao-chevron', svg: icons.chevronRight(14), 'aria-hidden': 'true' }))));
+      }
+      wrap.append(list);
+      return wrap;
+    }
+
+    _renderStatus() {
+      const items = this.state.items;
+      const fix = items.filter((i) => i.tier === 'fix').length;
+      this.statusText.textContent = !items.length
+        ? 'No problems found'
+        : `${items.length} found · ${fix} to fix`;
+      this.host.dataset.scanning = 'false';
+    }
+
+    /* ---------------------------------------------------------- navigation */
+
+    _enterSub(label) {
+      this.host.dataset.view = 'detail';
+      this.homeView.setAttribute('inert', '');
+      this.subView.removeAttribute('inert');
+      this.subView.setAttribute('aria-label', label);
+      requestAnimationFrame(() => this.subView.focus({ preventScroll: true }));
+    }
+
+    showHome() {
+      const from = this.state.activeIndex;
+      this.state.view = 'home';
+      this.host.dataset.view = 'home';
+      this.subView.setAttribute('inert', '');
+      this.homeView.removeAttribute('inert');
+      this.handlers.onClearMarks();
+      requestAnimationFrame(() => {
+        const btn = this.rowButtons.get(from);
+        if (btn) btn.focus({ preventScroll: true });
+        else this.homeView.focus({ preventScroll: true });
+      });
+    }
+
+    showIssue(index) {
+      const item = this.state.items[index];
+      if (!item) return;
+      this.state.view = 'issue';
+      this.state.activeIndex = index;
+      this.state.placeIndex = 0;
+      this._renderIssue();
+      this._enterSub(item.title);
+      this._revealCurrent();
+    }
+
+    step(delta) {
+      const next = this.state.activeIndex + delta;
+      if (next < 0 || next >= this.state.items.length) return;
+      this.state.activeIndex = next;
+      this.state.placeIndex = 0;
+      this._renderIssue();
+      this._revealCurrent();
+      this._announce(`${this.state.items[next].title}. ${next + 1} of ${this.state.items.length}.`);
+    }
+
+    _revealCurrent() {
+      const item = this.state.items[this.state.activeIndex];
+      const target = item?.targets[this.state.placeIndex];
+      if (target) this.handlers.onShowTarget(target.element, item.tier, item.title);
+      else this.handlers.onClearMarks();
+    }
+
+    /* --------------------------------------------------------- issue screen */
+
+    _renderIssue() {
+      const item = this.state.items[this.state.activeIndex];
+      if (!item) return;
+      const total = this.state.items.length;
+      const n = this.state.activeIndex;
+
+      const prev = el('button', {
+        type: 'button', class: 'lao-step-btn',
+        'aria-label': 'Previous issue',
+        disabled: n === 0,
+        svg: icons.chevronLeft(14),
+        on: { click: () => this.step(-1) },
+      });
+      const next = el('button', {
+        type: 'button', class: 'lao-step-btn',
+        'aria-label': 'Next issue',
+        disabled: n === total - 1,
+        svg: icons.chevronRight(14),
+        on: { click: () => this.step(1) },
+      });
+
+      const header = el('div', { class: 'lao-sub-head' },
+        this._backButton(),
+        el('div', { class: 'lao-stepper' },
+          prev,
+          el('span', { class: 'lao-stepper-count', text: `${n + 1} of ${total}` }),
+          next));
+
+      const body = el('div', { class: 'lao-sub-body' },
+        el('span', { class: 'lao-tier', data: { tier: item.tier } },
+          el('span', { class: 'lao-dot', data: { tier: item.tier }, 'aria-hidden': 'true' }),
+          TIER_LABEL[item.tier]),
+        el('h3', { class: 'lao-issue-title', text: item.title }));
+
+      // Evidence and the suggested fix describe the place currently being
+      // shown, not the first one — stepping through the places changes both.
+      const place = item.targets[this.state.placeIndex];
+      const source = place?.source || item.raw;
+
+      const evidence = this._evidence(item, source);
+      if (evidence) body.append(evidence);
+
+      // The stepper sits between the sample above it and the fix below it,
+      // because moving between places changes both of them.
+      if (item.targets.length > 1) body.append(this._places(item));
+
+      body.append(el('section', { class: 'lao-block' },
+        el('h4', { class: 'lao-block-title', text: 'Why this matters' }),
+        el('p', { class: 'lao-prose', text: item.why })));
+
+      const how = this._howToFix(item, source);
+      if (how) body.append(how);
+
+      if (item.targets.length === 1) {
+        body.append(el('div', { class: 'lao-actions' },
+          el('button', {
+            type: 'button', class: 'lao-btn',
+            on: { click: () => this._revealCurrent() },
+          }, el('span', { svg: icons.target(13), 'aria-hidden': 'true' }), 'Show me on the page')));
       }
 
-      block.append(el('p', {
-        class: 'lao-prose',
-        text: 'Hue and saturation are held; only lightness moves, and only as far as it has to.',
-      }));
+      if (item.category === 'tabs') {
+        body.append(el('div', { class: 'lao-actions' },
+          el('button', {
+            type: 'button', class: 'lao-btn',
+            on: { click: () => this.showKeyboard() },
+          }, 'See the whole keyboard path')));
+      }
+
+      body.append(this._tech(item, place));
+      this.subView.replaceChildren(header, body);
+    }
+
+    _backButton() {
+      return el('button', {
+        type: 'button', class: 'lao-back', on: { click: () => this.showHome() },
+      }, el('span', { svg: icons.chevronLeft(14), 'aria-hidden': 'true' }), 'All issues');
+    }
+
+    /** The thing itself: the failing colours, the current alt text, the heading. */
+    _evidence(item, source) {
+      if (item.category === 'contrast' && source && !source.unmeasurable) {
+        return el('div', {
+          class: 'lao-sample',
+          style: `background:${source.bgHex};color:${source.fgHex}`,
+        },
+          el('span', { class: 'lao-sample-lg', text: 'Text like this' }),
+          el('span', { class: 'lao-sample-sm', text: 'is hard for some people to read' }));
+      }
+      if (item.category === 'images' && source?.altValue) {
+        return el('div', { class: 'lao-quote' },
+          el('span', { class: 'lao-quote-label', text: 'It currently says' }),
+          el('span', { class: 'lao-quote-text', text: source.altValue }));
+      }
+      if (item.category === 'headings' && source?.name && source.name !== '(no text)') {
+        return el('div', { class: 'lao-quote' },
+          el('span', { class: 'lao-quote-label', text: 'The heading' }),
+          el('span', { class: 'lao-quote-text', text: source.name }));
+      }
+      return null;
+    }
+
+    _howToFix(item, source) {
+      const block = el('section', { class: 'lao-block' },
+        el('h4', { class: 'lao-block-title', text: 'How to fix it' }));
+
+      if (item.category === 'contrast' && source && !source.unmeasurable) {
+        const issue = source;
+        const fix = issue.fix;
+        const best = fix.text?.changed ? fix.text : null;
+
+        if (!best) {
+          block.append(el('p', {
+            class: 'lao-prose',
+            text: 'This colour cannot be made readable by making it lighter or darker — it needs a different colour altogether.',
+          }));
+          return block;
+        }
+
+        const hex = color.toHex(best.color);
+        block.append(el('p', {
+          class: 'lao-prose',
+          text: 'Darkening the text is usually the smallest change. This is the closest colour to the original that people can read:',
+        }));
+        block.append(el('button', {
+          type: 'button',
+          class: 'lao-swap',
+          'aria-label': `Use ${hex} instead of ${issue.fgHex}. Copy this colour.`,
+          on: { click: (e) => this._copy(hex, e.currentTarget) },
+        },
+          el('span', { class: 'lao-swap-chips', 'aria-hidden': 'true' },
+            el('span', { class: 'lao-chip-colour', style: `background:${issue.fgHex}` }),
+            el('span', { class: 'lao-swap-arrow', svg: icons.chevronRight(12) }),
+            el('span', { class: 'lao-chip-colour', style: `background:${hex}` })),
+          el('span', { class: 'lao-swap-body' },
+            el('b', { class: 'lao-swap-hex', text: hex }),
+            el('span', { class: 'lao-swap-note', text: 'Tap to copy' })),
+          el('span', { class: 'lao-copy-icon', svg: icons.copy(14), 'aria-hidden': 'true' })));
+        return block;
+      }
+
+      if (!item.howTo) return null;
+      block.append(el('p', { class: 'lao-prose', text: item.howTo }));
       return block;
     }
 
+    _places(item) {
+      const total = item.targets.length;
+      const i = this.state.placeIndex;
+      const target = item.targets[i];
+
+      const go = (delta) => {
+        this.state.placeIndex = (i + delta + total) % total;
+        this._renderIssue();
+        this._revealCurrent();
+      };
+
+      return el('section', { class: 'lao-block' },
+        el('h4', { class: 'lao-block-title', text: `Where it happens` }),
+        el('div', { class: 'lao-places' },
+          el('button', {
+            type: 'button', class: 'lao-step-btn',
+            'aria-label': 'Previous place', on: { click: () => go(-1) },
+            svg: icons.chevronLeft(14),
+          }),
+          el('span', { class: 'lao-places-body' },
+            el('span', { class: 'lao-places-count', text: `${i + 1} of ${total}` }),
+            el('span', { class: 'lao-places-text', text: target?.text || target?.label || '' })),
+          el('button', {
+            type: 'button', class: 'lao-step-btn',
+            'aria-label': 'Next place', on: { click: () => go(1) },
+            svg: icons.chevronRight(14),
+          })));
+    }
+
+    /**
+     * Everything an engineer needs and nobody else wants to see. Native
+     * <details> gives correct semantics for free; the open state is sticky so a
+     * developer sets it once rather than on every issue.
+     */
+    _tech(item, place) {
+      const list = el('ul', { class: 'lao-tech-list' });
+      // Contrast numbers belong to the place on screen, not to the group.
+      for (const line of place?.tech || item.tech || []) list.append(el('li', { text: line }));
+      if (place) list.append(el('li', { class: 'lao-tech-sel', text: place.label }));
+
+      const details = el('details', { class: 'lao-tech', open: this.state.techOpen || null },
+        el('summary', { class: 'lao-tech-summary' },
+          el('span', { class: 'lao-chevron', svg: icons.chevronRight(12), 'aria-hidden': 'true' }),
+          'Technical details'),
+        list);
+
+      details.addEventListener('toggle', () => { this.state.techOpen = details.open; });
+      return details;
+    }
+
     async _copy(text, button) {
-      const ratio = button.querySelector('.lao-fix-ratio');
-      const original = ratio?.textContent;
       try {
         await navigator.clipboard.writeText(text);
-        if (ratio) {
-          ratio.textContent = 'Copied';
-          ratio.classList.add('lao-copied');
+        const note = button.querySelector('.lao-swap-note');
+        if (note) {
+          note.textContent = 'Copied';
+          note.classList.add('lao-copied');
           setTimeout(() => {
-            ratio.textContent = original;
-            ratio.classList.remove('lao-copied');
-          }, 1400);
+            note.textContent = 'Tap to copy';
+            note.classList.remove('lao-copied');
+          }, 1500);
         }
-        this._announce(`${text} copied to clipboard`);
+        this._announce(`${text} copied`);
       } catch {
-        this._announce('Could not copy — this page blocks clipboard access');
+        this._announce('This page blocks copying');
       }
     }
 
-    _occurrences(issues) {
-      const wrap = el('div', {});
-      wrap.append(el('h3', {
-        class: 'lao-section-label',
-        style: 'padding:0 0 6px',
-        text: `${issues.length} ${issues.length === 1 ? 'occurrence' : 'occurrences'}`,
+    /* -------------------------------------------------------- page outline */
+
+    showOutline() {
+      this.state.view = 'outline';
+      this.state.activeIndex = -1;
+      this._renderOutline();
+      this._enterSub('Page outline');
+      this.handlers.onClearMarks();
+    }
+
+    _renderOutline() {
+      const result = this.state.results.headings;
+      const header = el('div', { class: 'lao-sub-head' },
+        this._backButton(),
+        el('span', { class: 'lao-sub-title', text: 'Page outline' }));
+
+      const body = el('div', { class: 'lao-sub-body' });
+      body.append(el('p', {
+        class: 'lao-prose',
+        text: 'Headings are the table of contents people use to navigate a page by screen reader. Each step should go down one level at a time.',
       }));
 
-      const list = el('ul', { class: 'lao-occurrences' });
-      for (const issue of issues.slice(0, 30)) {
-        list.append(el('li', {},
-          el('button', {
-            type: 'button',
-            class: 'lao-occurrence',
-            'aria-label': `Show ${util.describe(issue.element)} on the page`,
-            on: { click: () => this.handlers.onReveal(issue) },
-          },
-            el('code', { text: util.describe(issue.element) }),
-            el('span', { text: issue.text || '' }),
-            el('span', { svg: icons.target(13), 'aria-hidden': 'true' }))));
-      }
-      wrap.append(list);
-
-      if (issues.length > 30) {
-        wrap.append(el('p', {
-          class: 'lao-prose',
-          style: 'padding-top:8px',
-          text: `${issues.length - 30} more share this pairing.`,
-        }));
-      }
-      return wrap;
-    }
-
-    /* ----------------------------------------------------- detail: headings */
-
-    _headingsDetail(result) {
-      const frag = document.createDocumentFragment();
-
-      if (result.documentIssues.length) {
-        const wrap = el('div', { class: 'lao-issues' });
-        for (const issue of result.documentIssues) {
-          const p = issue.problems[0];
-          wrap.append(this._card({
-            id: issue.id,
-            severity: issue.severity,
-            title: p.label,
-            sub: issue.name,
-            build: () => [el('p', { class: 'lao-prose', text: p.detail })],
-          }));
-        }
-        frag.append(wrap);
-      }
-
       if (!result.outline.length) {
-        if (!result.documentIssues.length) {
-          frag.append(this._lensClear('No headings', 'This page has no heading elements.'));
-        }
-        return frag;
+        body.append(el('p', { class: 'lao-prose', text: 'This page has no headings at all.' }));
+        this.subView.replaceChildren(header, body);
+        return;
       }
-
-      frag.append(el('h3', { class: 'lao-section-label', text: 'Outline' }));
 
       const list = el('ul', { class: 'lao-outline' });
-      // Indent is capped so a deeply nested outline never pushes the label off
-      // the edge; the level chip carries the exact depth.
       for (const node of result.outline) {
         const rail = el('span', { class: 'lao-rail', 'aria-hidden': 'true' });
         for (let i = 1; i < Math.min(node.level, 5); i++) rail.append(el('i'));
-
         const flag = node.problems[0];
-        const row = el('button', {
-          type: 'button',
-          class: 'lao-h',
-          data: { sev: node.severity || 'none', empty: String(node.name === '(no text)') },
-          'aria-label': `Level ${node.level}: ${node.name}${flag ? `. ${flag.label}` : ''}. Show on page.`,
-          on: { click: () => this.handlers.onReveal(node) },
-        },
-          rail,
-          el('span', { class: 'lao-h-level', text: node.implicit ? `h${node.level}*` : `H${node.level}` }),
-          el('span', { class: 'lao-h-text', text: node.name }),
-          flag
-            ? el('span', {
-                class: 'lao-h-flag',
-                data: { sev: flag.severity },
-                text: flag.short || flag.label,
-              })
-            : null);
 
-        list.append(el('li', {}, row));
-      }
-      frag.append(list);
-
-      if (result.outline.some((n) => n.implicit)) {
-        frag.append(el('p', {
-          class: 'lao-prose',
-          style: 'padding:0 16px 20px',
-          text: '* marks an element using role="heading" rather than an h1–h6 tag.',
-        }));
-      }
-      return frag;
-    }
-
-    /* ------------------------------------------------------- detail: images */
-
-    _imagesDetail(result) {
-      if (!result.issues.length) {
-        return this._lensClear(
-          'Every image is accounted for',
-          `All ${result.scanned} images either describe themselves or are correctly marked decorative.`,
-        );
-      }
-
-      const wrap = el('div', { class: 'lao-issues' });
-      for (const issue of result.issues) {
-        wrap.append(this._card({
-          id: issue.id,
-          severity: issue.severity,
-          title: issue.title,
-          sub: util.describe(issue.element),
-          build: () => {
-            const parts = [el('p', { class: 'lao-prose', text: issue.detail })];
-
-            if (issue.altValue !== null) {
-              parts.push(el('div', { class: 'lao-pair' },
-                el('div', { class: 'lao-pair-sample' },
-                  el('b', { text: issue.altValue === '' ? 'alt="" (empty)' : 'Current alt text' }),
-                  el('code', { text: issue.altValue || '—' }))));
-            } else if (issue.name) {
-              parts.push(el('div', { class: 'lao-pair' },
-                el('div', { class: 'lao-pair-sample' },
-                  el('b', { text: `Named via ${issue.nameFrom}` }),
-                  el('code', { text: issue.name }))));
-            }
-
-            if (issue.fix) {
-              parts.push(el('p', { class: 'lao-prose' },
-                el('strong', { text: 'What to do: ' }), issue.fix));
-            }
-
-            parts.push(el('div', { class: 'lao-actions' },
-              el('button', {
-                type: 'button',
-                class: 'lao-btn',
-                on: { click: () => this.handlers.onReveal(issue) },
-              }, el('span', { svg: icons.target(13), 'aria-hidden': 'true' }), 'Show on page')));
-
-            return parts;
+        list.append(el('li', {},
+          el('button', {
+            type: 'button',
+            class: 'lao-h',
+            data: { sev: node.severity || 'none' },
+            'aria-label': `Level ${node.level}: ${node.name}${flag ? `. ${flag.label}` : ''}. Show on the page.`,
+            on: { click: () => this.handlers.onShowTarget(node.element, flag ? 'fix' : 'none', node.name) },
           },
-        }));
+            rail,
+            el('span', { class: 'lao-h-level', text: `H${node.level}` }),
+            el('span', { class: 'lao-h-text', text: node.name }),
+            flag ? el('span', {
+              class: 'lao-h-flag', data: { sev: flag.severity }, text: flag.short || flag.label,
+            }) : null)));
       }
-      return wrap;
+      body.append(list);
+      this.subView.replaceChildren(header, body);
     }
 
-    /* --------------------------------------------------------- detail: tabs */
+    /* --------------------------------------------------------- keyboard path */
 
-    _tabsDetail(result) {
-      const frag = document.createDocumentFragment();
-
-      if (!this.state.lenses.tabs) {
-        frag.append(el('div', { class: 'lao-issues' },
-          el('div', { class: 'lao-card' },
-            el('div', { style: 'padding:12px' },
-              el('p', { class: 'lao-prose', text: 'The tab path is not being drawn right now.' }),
-              el('div', { class: 'lao-actions', style: 'margin-top:10px' },
-                el('button', {
-                  type: 'button',
-                  class: 'lao-btn',
-                  data: { variant: 'primary' },
-                  on: { click: () => this.handlers.onToggleLens('tabs') },
-                }, 'Draw the tab path'))))));
-      }
-
-      if (result.issues.length) {
-        const wrap = el('div', { class: 'lao-issues' });
-        for (const issue of result.issues) {
-          wrap.append(this._card({
-            id: issue.id,
-            severity: issue.severity,
-            title: issue.title,
-            sub: issue.detail,
-            build: () => {
-              const parts = [el('p', { class: 'lao-prose', text: issue.detail })];
-              if (issue.fix) {
-                parts.push(el('p', { class: 'lao-prose' },
-                  el('strong', { text: 'What to do: ' }), issue.fix));
-              }
-              if (issue.element) {
-                parts.push(el('div', { class: 'lao-actions' },
-                  el('button', {
-                    type: 'button',
-                    class: 'lao-btn',
-                    on: { click: () => this.handlers.onReveal(issue) },
-                  }, el('span', { svg: icons.target(13), 'aria-hidden': 'true' }), 'Show on page')));
-              }
-              return parts;
-            },
-          }));
-        }
-        frag.append(wrap);
-      } else if (result.steps.length) {
-        frag.append(this._lensClear(
-          'Tab order follows the page',
-          `All ${result.steps.length} focus stops move forward through the layout, with no positive tabindex in use.`,
-        ));
-      }
-
-      if (result.steps.length) {
-        frag.append(el('h3', { class: 'lao-section-label', text: 'Focus path' }));
-        const list = el('ul', { class: 'lao-occurrences', style: 'margin:0 12px 20px' });
-        for (const step of result.steps.slice(0, 60)) {
-          list.append(el('li', {},
-            el('button', {
-              type: 'button',
-              class: 'lao-occurrence',
-              'aria-label': `Step ${step.index}: ${step.name || `${step.label}, no accessible name`}. Show on page.`,
-              on: { click: () => this.handlers.onReveal(step) },
-            },
-              el('code', { text: String(step.index).padStart(2, '0') }),
-              el('span', {
-                class: step.name ? '' : 'lao-unnamed',
-                text: step.name || `${step.label} — no accessible name`,
-              }),
-              el('span', {
-                class: 'lao-h-flag',
-                data: { sev: step.offCanvas ? 'critical' : 'warning' },
-                text: step.offCanvas ? 'off-screen' : 'backwards',
-                hidden: !step.backward && !step.offCanvas,
-              }))));
-        }
-        frag.append(list);
-        if (result.steps.length > 60) {
-          frag.append(el('p', {
-            class: 'lao-prose',
-            style: 'padding:0 16px 20px',
-            text: `${result.steps.length - 60} further stops are drawn on the page but not listed here.`,
-          }));
-        }
-      }
-
-      return frag;
+    showKeyboard() {
+      this.state.view = 'keyboard';
+      this._renderKeyboard();
+      this._enterSub('Keyboard path');
+      this.handlers.onShowTabPath(true);
     }
 
-    /* ------------------------------------------------------------ fragments */
+    _renderKeyboard() {
+      const result = this.state.results.tabs;
+      const header = el('div', { class: 'lao-sub-head' },
+        el('button', {
+          type: 'button', class: 'lao-back',
+          on: {
+            click: () => { this.handlers.onShowTabPath(false); this.showHome(); },
+          },
+        }, el('span', { svg: icons.chevronLeft(14), 'aria-hidden': 'true' }), 'All issues'),
+        el('span', { class: 'lao-sub-title', text: 'Keyboard path' }));
 
-    _card({ id, severity, title, sub, build }) {
-      const open = this.state.expanded.has(id);
-      const bodyId = `lao-body-${hash(id)}`;
+      const body = el('div', { class: 'lao-sub-body' });
+      body.append(el('p', {
+        class: 'lao-prose',
+        text: 'This is the route the Tab key takes through the page, drawn in order. It should flow the same way the page reads. Orange dashes mean focus jumps backwards.',
+      }));
 
-      const detail = el('div', { class: 'lao-card-detail' },
-        el('div', {}, el('div', { class: 'lao-card-detail-inner', id: bodyId }, ...build())));
+      if (!result.steps.length) {
+        body.append(el('p', { class: 'lao-prose', text: 'Nothing on this page can be reached with the keyboard.' }));
+        this.subView.replaceChildren(header, body);
+        return;
+      }
 
-      const btn = el('button', {
-        type: 'button',
-        class: 'lao-card-btn',
-        'aria-expanded': String(open),
-        'aria-controls': bodyId,
-      },
-        meter(severity),
-        el('span', { class: 'lao-card-body' },
-          el('span', { class: 'lao-card-title', text: title }),
-          el('span', { class: 'lao-card-sub', text: sub })),
-        el('span', { class: 'lao-chevron', svg: icons.chevronRight(14), 'aria-hidden': 'true' }));
-
-      const card = el('div', { class: 'lao-card', data: { open: String(open), sev: severity } }, btn, detail);
-
-      btn.addEventListener('click', () => {
-        const nowOpen = !this.state.expanded.has(id);
-        if (nowOpen) this.state.expanded.add(id);
-        else this.state.expanded.delete(id);
-        card.dataset.open = String(nowOpen);
-        btn.setAttribute('aria-expanded', String(nowOpen));
-      });
-
-      // The severity is on the button for sighted users via the meter glyph; it
-      // needs saying out loud too.
-      btn.setAttribute('aria-label', `${SEV_LABEL[severity] || 'Notice'}: ${title}. ${sub}`);
-      return card;
-    }
-
-    _lensClear(title, body) {
-      return el('div', { class: 'lao-lens-clear' },
-        el('span', { svg: icons.apertureOpen(38) }),
-        el('b', { text: title }),
-        el('p', { text: body }));
+      const list = el('ul', { class: 'lao-path-list' });
+      for (const step of result.steps.slice(0, 80)) {
+        const problem = step.offCanvas ? 'off-screen' : step.backward ? 'goes backwards' : null;
+        list.append(el('li', {},
+          el('button', {
+            type: 'button', class: 'lao-path-row',
+            'aria-label': `Stop ${step.index}: ${step.name || 'no name'}${problem ? `, ${problem}` : ''}. Show on the page.`,
+            on: { click: () => this.handlers.onShowTarget(step.el, problem ? 'fix' : 'none', step.name) },
+          },
+            el('span', { class: 'lao-path-num', text: String(step.index) }),
+            el('span', {
+              class: step.name ? 'lao-path-name' : 'lao-path-name lao-unnamed',
+              text: step.name || 'No name — a screen reader cannot announce this',
+            }),
+            problem ? el('span', {
+              class: 'lao-h-flag',
+              data: { sev: step.offCanvas ? 'critical' : 'warning' },
+              text: problem,
+            }) : null)));
+      }
+      body.append(list);
+      this.subView.replaceChildren(header, body);
     }
 
     _announce(message) {
@@ -940,31 +668,6 @@
       clearTimeout(this._announceTimer);
       this._announceTimer = setTimeout(() => this._renderStatus(), 2600);
     }
-  }
-
-  /* --------------------------------------------------------------- helpers */
-
-  function worstOf(issues) {
-    let out = 'notice';
-    for (const i of issues) if ((RANK[i.severity] || 0) > RANK[out]) out = i.severity;
-    return issues.length ? out : 'clear';
-  }
-
-  function severityBreakdown(stat) {
-    return ['critical', 'warning', 'notice']
-      .filter((s) => stat[s])
-      .map((s) => `${stat[s]} ${s}`)
-      .join(' · ');
-  }
-
-  function scannedFor(results, key) {
-    return results[key]?.scanned ?? 0;
-  }
-
-  function hash(str) {
-    let h = 0;
-    for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
-    return Math.abs(h).toString(36);
   }
 
   LAO.Panel = Panel;

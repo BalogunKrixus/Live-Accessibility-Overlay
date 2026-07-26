@@ -71,7 +71,7 @@ let allExist = true;
 for (const file of runtimeList) {
   try { readFileSync(join(ROOT, file)); } catch { allExist = false; console.log(`      missing: ${file}`); }
 }
-check('manifest: every injected file exists', allExist && runtimeList.length === 11,
+check('manifest: every injected file exists', allExist && runtimeList.length === 12,
   `${runtimeList.length} files`);
 
 // Grant host permissions in the temp copy only, so injection can be triggered
@@ -103,7 +103,7 @@ const injected = await worker.evaluate(async () => {
     'src/core/util.js', 'src/core/color.js',
     'src/audits/contrast.js', 'src/audits/headings.js',
     'src/audits/images.js', 'src/audits/taborder.js',
-    'src/ui/styles.js', 'src/ui/icons.js',
+    'src/ui/styles.js', 'src/ui/icons.js', 'src/ui/copy.js',
     'src/ui/overlay.js', 'src/ui/panel.js', 'src/content/main.js',
   ];
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -111,7 +111,7 @@ const injected = await worker.evaluate(async () => {
   const res = await chrome.tabs.sendMessage(tab.id, { type: 'lao:ping' });
   return { tabId: tab.id, pong: res?.type };
 });
-check('injection: all 11 runtime files execute in order', !!injected.tabId);
+check('injection: all 12 runtime files execute in order', !!injected.tabId);
 check('messaging: content script answers the ping handshake', injected.pong === 'lao:pong');
 
 // The content script lives in an isolated world, so its globals are invisible
@@ -131,7 +131,7 @@ const live = await page.evaluate(() => {
     panelState: sr.querySelector('.lao-panel')?.dataset.state,
     status: sr.querySelector('.lao-status')?.textContent?.trim(),
     markers: sr.querySelectorAll('.lao-mk').length,
-    lensRows: sr.querySelectorAll('.lao-lens').length,
+    issueRows: sr.querySelectorAll('.lao-items .lao-item').length,
     panelWidth: Math.round(sr.querySelector('.lao-panel').getBoundingClientRect().width),
     // Proof of isolation: the extension's globals must not reach the page.
     leaks: Object.keys(globalThis).filter((k) => k.startsWith('__LAO')),
@@ -141,9 +141,10 @@ check('runtime: panel mounted in a shadow root', live.mounted);
 check('runtime: stylesheet adopted and applied',
   live.ruleCount > 60 && live.panelWidth === 372, `${live.ruleCount} rules, ${live.panelWidth}px`);
 check('runtime: panel opened on injection', live.panelState === 'open');
-check('runtime: all four lenses rendered', live.lensRows === 4);
-check('runtime: scan produced findings', /\d+ issues?/.test(live.status || ''), live.status);
-check('runtime: markers drawn on the page', live.markers > 0, `${live.markers} markers`);
+check('runtime: issue list rendered', live.issueRows > 0, `${live.issueRows} rows`);
+check('runtime: scan produced findings', /\d+ found/.test(live.status || ''), live.status);
+check('runtime: page starts unmarked until something is selected',
+  live.markers === 0, `${live.markers} markers`);
 check('isolation: nothing leaks into the page world', live.leaks.length === 0);
 check('runtime: no uncaught page errors', pageErrors.length === 0, pageErrors.join('; '));
 
@@ -175,7 +176,7 @@ const afterClose = await page.evaluate(() => {
   };
 });
 check('toggle: closes the panel', toggled && afterClose.state === 'closed');
-check('toggle: clears markers from the page', afterClose.markers === 0, `${afterClose.markers} left`);
+check('toggle: leaves nothing drawn on the page', afterClose.markers === 0, `${afterClose.markers} left`);
 
 await context.close();
 server.close();
