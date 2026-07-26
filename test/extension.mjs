@@ -47,10 +47,17 @@ const BASE = `http://127.0.0.1:${server.address().port}`;
 
 /* ------------------------------------------ stage the extension in a temp dir */
 
+// LAO_EXT_DIR points the test at an already-extracted build, so the artifact
+// that actually ships can be verified rather than just the source tree.
 const dir = mkdtempSync(join(tmpdir(), 'lao-ext-'));
-cpSync(join(ROOT, 'manifest.json'), join(dir, 'manifest.json'));
-cpSync(join(ROOT, 'src'), join(dir, 'src'), { recursive: true });
-cpSync(join(ROOT, 'icons'), join(dir, 'icons'), { recursive: true });
+if (process.env.LAO_EXT_DIR) {
+  cpSync(process.env.LAO_EXT_DIR, dir, { recursive: true });
+  console.log(`  (testing the built package at ${process.env.LAO_EXT_DIR})`);
+} else {
+  cpSync(join(ROOT, 'manifest.json'), join(dir, 'manifest.json'));
+  cpSync(join(ROOT, 'src'), join(dir, 'src'), { recursive: true });
+  cpSync(join(ROOT, 'icons'), join(dir, 'icons'), { recursive: true });
+}
 
 const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
 check('manifest: is Manifest V3', manifest.manifest_version === 3);
@@ -65,11 +72,11 @@ check('manifest: permissions are minimal',
 // The service worker's injection list is the single source of truth for load
 // order; if a file is added to src/ and not to that list, injection breaks at
 // runtime with a confusing undefined error. Verify every entry resolves.
-const swSource = readFileSync(join(ROOT, 'src/background/service-worker.js'), 'utf8');
+const swSource = readFileSync(join(dir, 'src/background/service-worker.js'), 'utf8');
 const runtimeList = [...swSource.matchAll(/'(src\/[^']+\.js)'/g)].map((m) => m[1]);
 let allExist = true;
 for (const file of runtimeList) {
-  try { readFileSync(join(ROOT, file)); } catch { allExist = false; console.log(`      missing: ${file}`); }
+  try { readFileSync(join(dir, file)); } catch { allExist = false; console.log(`      missing: ${file}`); }
 }
 check('manifest: every injected file exists', allExist && runtimeList.length === 12,
   `${runtimeList.length} files`);

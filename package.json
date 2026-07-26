@@ -10,7 +10,10 @@
     "test:ext": "node test/extension.mjs",
     "shots": "node test/harness.mjs --shots",
     "icons": "node tools/make-icons.mjs",
-    "lint": "node tools/check-syntax.mjs"
+    "lint": "node tools/check-syntax.mjs",
+    "package": "node tools/package.mjs",
+    "store-assets": "node tools/store-assets.mjs",
+    "verify-package": "node tools/package.mjs && rm -rf /tmp/lao-verify && mkdir -p /tmp/lao-verify && unzip -q dist/*.zip -d /tmp/lao-verify && LAO_EXT_DIR=/tmp/lao-verify node test/extension.mjs"
   },
   "devDependencies": {
     "playwright": "^1.62.0"

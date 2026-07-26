@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fernwood — plants, delivered</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #1b2126;
+    background: #fdfcfa;
+  }
+  .wrap { max-width: 720px; padding: 0 56px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 56px;
+    border-bottom: 1px solid #ecebe7;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.02em; }
+  .brand-dot { width: 22px; height: 22px; border-radius: 7px; background: #2f6a4f; }
+  nav { display: flex; gap: 26px; }
+  /* Deliberate: nav links sit at roughly 3.4:1 — a near miss, not a disaster. */
+  nav a { color: #949c98; text-decoration: none; font-size: 15px; }
+
+  h1 { font-size: 46px; line-height: 1.08; letter-spacing: -0.035em; margin: 56px 0 16px; font-weight: 680; }
+  /* Deliberate: the hero subcopy is well under AA. */
+  .lede { font-size: 19px; color: #b3b8b5; margin: 0 0 30px; max-width: 30ch; }
+
+  .cta { display: flex; gap: 12px; align-items: center; }
+  .btn {
+    font: inherit; font-weight: 600; font-size: 15px;
+    padding: 12px 22px; border-radius: 10px; border: 0;
+    background: #2f6a4f; color: #fff; cursor: pointer;
+  }
+  .btn-ghost { background: transparent; color: #2f6a4f; border: 1px solid #cfd8d3; }
+
+  /* Deliberate: jumps from h1 straight to h3. */
+  h3 { font-size: 21px; letter-spacing: -0.02em; margin: 64px 0 18px; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { border: 1px solid #ecebe7; border-radius: 14px; overflow: hidden; background: #fff; }
+  .card img { display: block; width: 100%; height: 92px; object-fit: cover; }
+  .card p { margin: 0; padding: 14px 16px 18px; font-size: 14px; }
+  .card b { display: block; font-size: 15px; margin-bottom: 3px; }
+  .swatch-a { background: linear-gradient(135deg,#7fb08f,#3d7a5b); }
+  .swatch-b { background: linear-gradient(135deg,#d8c9a8,#b39b6b); }
+  .swatch-c { background: linear-gradient(135deg,#a8c3d8,#6b8fb3); }
+  footer { margin-top: 72px; padding: 26px 56px; border-top: 1px solid #ecebe7; font-size: 14px; color: #8c938f; }
+</style>
+</head>
+<body>
+
+  <header>
+    <span class="brand"><span class="brand-dot"></span> Fernwood</span>
+    <nav>
+      <a href="#plants">Plants</a>
+      <a href="#care">Care guides</a>
+      <a href="#gifts">Gifting</a>
+      <a href="#account">Account</a>
+    </nav>
+  </header>
+
+  <div class="wrap">
+    <h1>Plants that arrive alive.</h1>
+    <p class="lede">Grown in Somerset, packed the morning they ship, and guaranteed for thirty days.</p>
+
+    <div class="cta">
+      <button class="btn" type="button">Browse the collection</button>
+      <button class="btn btn-ghost" type="button">How delivery works</button>
+    </div>
+
+    <h3>This month's picks</h3>
+    <div class="cards">
+      <div class="card">
+        <!-- Deliberate: no alt attribute at all. -->
+        <img class="swatch-a" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E">
+        <p><b>Monstera</b>Bright, indirect light. Forgiving.</p>
+      </div>
+      <div class="card">
+        <img class="swatch-b" alt="A trailing string-of-hearts in a terracotta pot"
+             src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E">
+        <p><b>String of hearts</b>Happiest on a high shelf.</p>
+      </div>
+      <div class="card">
+        <!-- Deliberate: alt is the file name. -->
+        <img class="swatch-c" alt="fern-hero-final-2.jpg"
+             src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E">
+        <p><b>Bird's nest fern</b>Loves a steamy bathroom.</p>
+      </div>
+    </div>
+  </div>
+
+  <footer>Fernwood is a fictional shop used to demonstrate this extension.</footer>
+</body>
+</html>

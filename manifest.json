@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Live Accessibility Overlay",
   "version": "1.0.0",
-  "description": "See accessibility problems on the live page, in context. Contrast, headings, alt text and tab order — measured locally, never uploaded.",
+  "description": "Find accessibility problems on any page, in plain language: contrast, headings, alt text and keyboard order. Checked locally.",
   "minimum_chrome_version": "111",
 
   "permissions": ["activeTab", "scripting", "storage"],
