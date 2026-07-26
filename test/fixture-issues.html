@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixture — a page with known problems</title>
+<style>
+  :root { color-scheme: light; }
+  body {
+    margin: 0; padding: 48px 56px 120px;
+    font: 16px/1.6 ui-sans-serif, system-ui, sans-serif;
+    background: #ffffff; color: #1a1a1a;
+    max-width: 760px;
+  }
+  h1 { font-size: 34px; letter-spacing: -0.02em; margin: 0 0 8px; }
+  h2 { font-size: 22px; margin: 40px 0 10px; }
+  h4 { font-size: 17px; margin: 24px 0 6px; }
+  p { margin: 0 0 14px; }
+
+  /* Known contrast failures -------------------------------------------- */
+  .fail-hard   { color: #b9b9b9; }            /* ~1.9:1 on white  -> critical */
+  .fail-mid    { color: #949494; }            /* ~2.8:1 on white  -> critical/warning */
+  .fail-near   { color: #767676; }            /* ~4.54:1 -> passes, control */
+  .fail-slight { color: #8a8a8a; }            /* ~3.5:1 -> warning */
+  .on-brand    { background: #2f6f75; color: #7fbcc2; padding: 14px 18px; border-radius: 8px; }
+  .large-ok    { font-size: 26px; color: #8f8f8f; }  /* large text, 3:1 threshold */
+  .gradient    { background: linear-gradient(90deg,#123,#eee); color: #888; padding: 14px 18px; }
+  .translucent { color: rgba(0,0,0,0.35); }
+
+  /* Same colour pair as .fail-hard but a different class — these must collapse
+     into one group, since they are one bad decision repeated, not four. */
+  .repeat-fail { color: #b9b9b9; }
+
+  .sr-only {
+    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+  }
+
+  .drawer { position: fixed; top: 0; left: -320px; width: 300px; }
+  .thumbs { display: flex; gap: 12px; margin: 16px 0; }
+  .thumbs img { width: 90px; height: 60px; object-fit: cover; border-radius: 6px; background: #dfe3e8; }
+  nav a { margin-right: 14px; }
+  button, input { font: inherit; padding: 8px 12px; margin-right: 8px; }
+</style>
+</head>
+<body>
+
+  <!-- Headings: h1 -> h4 skip, an empty heading, a role=heading ------------- -->
+  <h1>Quarterly design review</h1>
+  <p class="fail-mid">This intro sits at roughly 2.8:1 against white, which fails AA for body text.</p>
+
+  <h4>Skipped straight from H1 to H4</h4>
+  <p>The outline implies an H2 and H3 that do not exist.</p>
+
+  <h2></h2>
+
+  <h2>Contrast samples</h2>
+  <p class="fail-hard">Very low contrast paragraph, around 1.9 to 1.</p>
+  <p class="fail-slight">A slighter failure, around 3.5 to 1.</p>
+  <p class="fail-near">This one passes at about 4.5 to 1 and should not be flagged.</p>
+  <p class="large-ok">Large text at 26px only needs 3 to 1.</p>
+  <div class="on-brand"><p>Low contrast text on a coloured panel.</p></div>
+  <div class="gradient"><p>Text over a gradient cannot be measured.</p></div>
+  <p class="translucent">Translucent text composited over the page background.</p>
+  <p class="sr-only">Screen reader only text that must never be flagged for contrast.</p>
+  <ul>
+    <li class="repeat-fail">The same failing pair, repeated once</li>
+    <li class="repeat-fail">The same failing pair, repeated twice</li>
+    <li class="repeat-fail">The same failing pair, repeated three times</li>
+  </ul>
+
+  <h2>Images</h2>
+  <div class="thumbs">
+    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E">
+    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="hero-banner-final-v2.png">
+    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="">
+    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Two designers reviewing printed wireframes at a desk">
+    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="image of a laptop">
+  </div>
+  <a href="#pricing"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="" width="40" height="40"></a>
+
+  <h2 id="pricing">Keyboard order</h2>
+  <nav>
+    <a href="#one">First link</a>
+    <a href="#two" tabindex="3">Pulled forward by tabindex 3</a>
+    <a href="#three">Third link</a>
+  </nav>
+  <p>
+    <button type="button">Save changes</button>
+    <input type="text" aria-label="Search projects" placeholder="Search projects">
+    <button type="button" disabled>Disabled, skipped</button>
+  </p>
+  <div class="drawer">
+    <button type="button">Off-canvas menu item</button>
+  </div>
+
+  <div role="heading" aria-level="3">A role-based heading at level 3</div>
+  <p>Trailing content.</p>
+
+</body>
+</html>

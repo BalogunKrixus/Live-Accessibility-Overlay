@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixture — a page with nothing to flag</title>
+<style>
+  body {
+    margin: 0; padding: 48px 56px;
+    font: 16px/1.6 ui-sans-serif, system-ui, sans-serif;
+    background: #ffffff; color: #1c1f26;
+    max-width: 680px;
+  }
+  h1 { font-size: 32px; letter-spacing: -0.02em; margin: 0 0 10px; }
+  h2 { font-size: 21px; margin: 32px 0 8px; }
+  h3 { font-size: 17px; margin: 20px 0 6px; }
+  p { margin: 0 0 14px; color: #3c414d; }
+  img { width: 120px; height: 80px; border-radius: 8px; background: #e6e9ee; display: block; margin: 16px 0; }
+  a { color: #0b5f8a; }
+  button { font: inherit; padding: 8px 14px; }
+</style>
+</head>
+<body>
+  <h1>A page with nothing to flag</h1>
+  <p>Every heading steps down one level at a time, every image is accounted for, and all text clears AA.</p>
+
+  <h2>Structure</h2>
+  <p>This section sits directly beneath the top-level heading.</p>
+
+  <h3>A third level, in order</h3>
+  <p>No levels are skipped anywhere in this document.</p>
+
+  <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="A sketched wireframe of a settings screen">
+  <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="">
+
+  <h2>Keyboard</h2>
+  <p>Focus moves in reading order: <a href="#a">first</a>, then <a href="#b">second</a>.</p>
+  <p><button type="button">Continue</button></p>
+</body>
+</html>
