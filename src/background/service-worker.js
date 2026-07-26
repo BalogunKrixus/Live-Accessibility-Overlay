@@ -103,26 +103,37 @@ chrome.commands.onCommand.addListener(async (command) => {
 });
 
 /**
- * The content script reports its issue count so the toolbar icon carries a
- * live summary. Badge colour follows the worst severity present, matching the
- * panel's palette so the two never disagree.
+ * The toolbar badge shows one thing: the number of issues on the page in this
+ * tab. Badges are set per-tab, so switching tabs shows that tab's own count and
+ * never another page's. Anything that is not an issue count — a checkmark, a
+ * status glyph — would make the number ambiguous at a glance, so there is none.
  */
-const BADGE_COLOR = { critical: '#C22F4A', warning: '#8A5A0B', notice: '#4B4BC4', clear: '#0C6F79' };
+const BADGE_COLOR = { fix: '#C22F4A', check: '#8A5A0B', clear: '#0C6F79' };
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type !== 'lao:badge' || !sender.tab?.id) return;
   const tabId = sender.tab.id;
-  const { count = 0, tone = 'clear', active = true } = msg;
-  const text = !active ? '' : count > 99 ? '99+' : count ? String(count) : '✓';
+  const { count = 0, tone = 'clear' } = msg;
+
+  // No issues means no badge. A "0" reads as a measurement someone has to
+  // interpret; an empty icon reads as nothing to do.
+  const text = count > 99 ? '99+' : count > 0 ? String(count) : '';
   chrome.action.setBadgeText({ tabId, text }).catch(() => {});
   chrome.action
     .setBadgeBackgroundColor({ tabId, color: BADGE_COLOR[tone] || BADGE_COLOR.clear })
     .catch(() => {});
+  chrome.action.setBadgeTextColor?.({ tabId, color: '#FFFFFF' }).catch(() => {});
   sendResponse({ ok: true });
   return false;
 });
 
-// A navigation discards the injected runtime; clear the stale badge with it.
+/**
+ * Any navigation invalidates the count. `status === 'loading'` covers full page
+ * loads; `info.url` also fires for in-page route changes in single-page apps,
+ * where the count would otherwise sit there describing the previous view.
+ */
 chrome.tabs.onUpdated.addListener((tabId, info) => {
-  if (info.status === 'loading') chrome.action.setBadgeText({ tabId, text: '' }).catch(() => {});
+  if (info.status === 'loading' || info.url) {
+    chrome.action.setBadgeText({ tabId, text: '' }).catch(() => {});
+  }
 });

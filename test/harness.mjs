@@ -227,6 +227,26 @@ check('simplicity: no lens toggles to configure', surface.hasToggles === 0);
 check('simplicity: overview is a list, not a control panel',
   surface.configControls === 0 && surface.inputs === 0,
   `${surface.controlCount} rows, ${surface.configControls} settings`);
+/* Coverage strip -------------------------------------------------------- */
+const coverage = await page.evaluate(() => {
+  const sr = document.querySelector('live-accessibility-overlay').shadowRoot;
+  const block = sr.querySelector('.lao-view--home .lao-coverage');
+  const r = globalThis.__LAO__.app.results;
+  return {
+    present: !!block,
+    label: block?.querySelector('.lao-coverage-label')?.textContent,
+    text: block?.querySelector('.lao-coverage-line')?.textContent,
+    expected: [r.contrast.scanned, r.images.scanned, r.headings.scanned, r.tabs.scanned],
+    // It must sit at the very bottom of the overview, below everything else.
+    isLastChild: block === sr.querySelector('.lao-view--home').lastElementChild,
+  };
+});
+check('coverage: "Checked on this page" is shown', coverage.present && coverage.label === 'Checked on this page');
+check('coverage: it sits at the foot of the overview', coverage.isLastChild);
+check('coverage: it reports what was actually scanned',
+  coverage.expected.every((n) => new RegExp(`\\b${n}\\b`).test(coverage.text || '')),
+  coverage.text);
+
 check('simplicity: issue titles are plain sentences',
   surface.titles.every((t) => /^[A-Z]/.test(t) && !/\d+(\.\d+)?:1/.test(t)),
   surface.titles[0]);
@@ -472,6 +492,17 @@ if (WANT_SHOTS) {
   await page.waitForTimeout(500);
   await shoot('01-overview-light', { clip: await panelClip() });
 
+  // Scrolled to the foot of the overview, where the coverage strip sits.
+  await page.evaluate(() => {
+    const v = globalThis.__LAO__.app.shadow.querySelector('.lao-view--home');
+    v.scrollTop = v.scrollHeight;
+  });
+  await page.waitForTimeout(300);
+  await shoot('01b-overview-bottom-light', { clip: await panelClip() });
+  await page.evaluate(() => {
+    globalThis.__LAO__.app.shadow.querySelector('.lao-view--home').scrollTop = 0;
+  });
+
   // A contrast issue: the colour swap and the "where it happens" stepper.
   await page.evaluate((i) => globalThis.__LAO__.app.panel.showIssue(i), await idxOf('contrast'));
   await page.waitForTimeout(600);
@@ -554,12 +585,25 @@ const clean = await page2.evaluate(() => {
     hasAllClear: !!sr.querySelector('.lao-clear'),
     markers: sr.querySelectorAll('.lao-mk').length,
     headline: sr.querySelector('.lao-clear-title')?.textContent,
+    coverage: sr.querySelector('.lao-coverage-line')?.textContent,
+    ...(() => {
+      const home = sr.querySelector('.lao-view--home');
+      const strip = sr.querySelector('.lao-coverage');
+      const gap = Math.round(home.getBoundingClientRect().bottom - strip.getBoundingClientRect().bottom);
+      return { coverageGap: gap, coverageAtFoot: gap < 40 };
+    })(),
   };
 });
 check('clean page: reports zero issues', clean.total === 0, JSON.stringify(clean.detail));
 check('clean page: shows the all-clear state', clean.hasAllClear);
 check('clean page: draws no markers', clean.markers === 0);
 check('clean page: says so in plain words', clean.headline === 'Nothing to fix', clean.headline);
+check('clean page: still reports what was checked',
+  !!clean.coverage && /pieces of text/.test(clean.coverage), clean.coverage);
+// margin-top:auto silently computes to 0 if the column ever stops being a flex
+// container, which parks the strip under the content instead of at the foot.
+check('clean page: the coverage strip is pushed to the foot of the panel',
+  clean.coverageAtFoot, `${clean.coverageGap}px from the bottom`);
 
 if (WANT_SHOTS) {
   await page2.waitForTimeout(600);

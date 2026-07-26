@@ -60,11 +60,13 @@ Every ratio, hex value, selector and WCAG reference lives behind a collapsed **T
 details** disclosure. A developer opens it once and it stays open; nobody else ever sees it.
 That is what lets the surface stay plain without dumbing the tool down.
 
-### Aperture
+### The mark
 
-The tool reads a page the way a light meter reads a scene — legibility, not compliance
-policing. That drives the mark (a hexagonal iris), the aqua/rose/ochre palette, and the
-language: "5 things to fix", never "5 violations".
+A hexagon with a check inside it, used solid for the toolbar icon and outlined inside the
+panel. `tools/make-icons.mjs` rasterises the PNG set from the same geometry the panel draws,
+so the two can never drift apart, and writes `icons/mark.svg` as a vector master.
+
+The language stays plain throughout: "5 things to fix", never "5 violations".
 
 On-page, an issue is marked with **thin corner brackets** — crop marks, not boxes — and a
 caption in plain words. The caption is right-aligned above the block, because whatever sits
@@ -74,6 +76,20 @@ above it is nearly always left-aligned and narrower, so that corner is usually e
 
 Docked, not floating; 372px; light and dark following the system, with a manual override.
 Two panes slide between the list and a single issue.
+
+At the foot of the overview, a quiet **Checked on this page** strip reports what the scan
+actually looked at — pieces of text, images, headings, keyboard stops. It is the denominator
+behind the headline: "5 things to fix" means something very different over 12 pieces of text
+than over 400. It shows in the same place whether the page is clean or not.
+
+### The toolbar badge
+
+The extension icon carries one number: how many issues are on the page in that tab. It counts
+the same grouped items the panel lists, so the badge and the panel can never disagree. Badges
+are per-tab, so switching tabs shows that tab's own count; any navigation — including an
+in-page route change in a single-page app — clears it rather than letting it describe a view
+you have left. No issues means no badge at all, since a "0" is a measurement to interpret
+while a bare icon reads as nothing to do.
 
 ---
 

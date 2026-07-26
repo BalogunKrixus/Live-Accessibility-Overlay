@@ -148,6 +148,29 @@ check('runtime: page starts unmarked until something is selected',
 check('isolation: nothing leaks into the page world', live.leaks.length === 0);
 check('runtime: no uncaught page errors', pageErrors.length === 0, pageErrors.join('; '));
 
+// The toolbar badge: it must carry the same number the panel lists, scoped to
+// this tab. A badge that disagrees with the panel is worse than no badge.
+const badge = await worker.evaluate(async (tabId) => {
+  const text = await chrome.action.getBadgeText({ tabId });
+  const colour = await chrome.action.getBadgeBackgroundColor({ tabId });
+  // A tab the extension has never run in must carry no badge of its own.
+  const otherTab = await chrome.tabs.create({ url: 'about:blank', active: false });
+  const otherText = await chrome.action.getBadgeText({ tabId: otherTab.id });
+  await chrome.tabs.remove(otherTab.id);
+  return { text, colour, otherText };
+}, injected.tabId);
+
+const panelCount = await page.evaluate(() => {
+  const sr = document.querySelector('live-accessibility-overlay').shadowRoot;
+  return (sr.querySelector('.lao-status')?.textContent || '').match(/(\d+) found/)?.[1];
+});
+check('badge: shows a plain issue count', /^\d+$/.test(badge.text), `"${badge.text}"`);
+check('badge: matches the number the panel reports',
+  badge.text === panelCount, `badge ${badge.text} vs panel ${panelCount}`);
+check('badge: is scoped to this tab only', badge.otherText === '', `other tab: "${badge.otherText}"`);
+check('badge: is tinted for the worst tier present',
+  badge.colour?.[0] === 194, JSON.stringify(badge.colour));
+
 // Storage round-trip: click the real theme control (Playwright's CSS engine
 // pierces open shadow roots), then read the value back from the service worker,
 // which shares the extension's storage area.

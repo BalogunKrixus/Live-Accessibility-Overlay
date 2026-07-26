@@ -157,30 +157,19 @@
       if (announce) this.panel._announce(`Rescanned in ${this.duration}ms`);
     }
 
+    /**
+     * The toolbar badge carries one number: how many issues are on the page in
+     * this tab. It counts the same grouped items the panel lists, so the badge
+     * and the panel can never disagree — showing raw findings here while the
+     * panel showed grouped ones was just confusing.
+     */
     _reportBadge() {
       if (!this.results) return;
-      const total =
-        this.results.contrast.issues.length +
-        this.results.headings.issues.length +
-        this.results.images.issues.length +
-        this.results.tabs.issues.length;
-
-      const all = [
-        ...this.results.contrast.issues,
-        ...this.results.headings.issues,
-        ...this.results.images.issues,
-        ...this.results.tabs.issues,
-      ];
-      const tone = all.some((i) => i.severity === 'critical')
-        ? 'critical'
-        : all.some((i) => i.severity === 'warning')
-          ? 'warning'
-          : all.length
-            ? 'notice'
-            : 'clear';
+      const items = LAO.copy.build(this.results);
+      const tone = items.some((i) => i.tier === 'fix') ? 'fix' : items.length ? 'check' : 'clear';
 
       try {
-        chrome.runtime.sendMessage({ type: 'lao:badge', count: total, tone, active: this.isOpen });
+        chrome.runtime.sendMessage({ type: 'lao:badge', count: items.length, tone });
       } catch {
         /* Extension context invalidated (reloaded); harmless. */
       }

@@ -12,37 +12,40 @@
     `aria-hidden="true" focusable="false">${body}</svg>`;
 
   /**
-   * The aperture: a hexagonal iris inside a ring, with three blades extending
-   * along the hexagon's edges out to the circle. It reads as a lens rather than
-   * a checkmark, a shield or a warning triangle — the tool measures how a page
-   * is seen, it does not police it.
+   * The brand mark: a pointy-top hexagon with a check inside it. Drawn as an
+   * outline here so it sits in the same stroked family as the rest of the set;
+   * the toolbar icon is the solid version of the same geometry.
    */
-  const aperture = (size = 20) =>
-    svg(
-      `<circle cx="12" cy="12" r="9.25"/>
-       <path d="M12 7 L16.33 9.5 L16.33 14.5 L12 17 L7.67 14.5 L7.67 9.5 Z"/>
-       <path d="M12 7 L16.98 4.13"/>
-       <path d="M7.67 14.5 L2.70 11.62"/>
-       <path d="M16.33 14.5 L16.32 20.25"/>`,
-      size,
-    );
+  const HEX = [90, 150, 210, 270, 330, 30]
+    .map((deg) => {
+      const t = (deg * Math.PI) / 180;
+      return [12 + 9.5 * Math.cos(t), 12 - 9.5 * Math.sin(t)];
+    })
+    .map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`)
+    .join(' ') + ' Z';
 
-  /** Solid aperture for the all-clear state — the iris fully open. */
-  const apertureOpen = (size = 44) =>
+  const CHECK = 'M8.1 12.2 L10.9 15.1 L16.2 8.9';
+
+  const mark = (size = 20) =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"
+      stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
       aria-hidden="true" focusable="false">
-      <circle cx="12" cy="12" r="9.25"/>
-      <path d="M12 7 L16.33 9.5 L16.33 14.5 L12 17 L7.67 14.5 L7.67 9.5 Z"
-            fill="currentColor" fill-opacity="0.14"/>
-      <path d="M12 7 L16.98 4.13"/>
-      <path d="M7.67 14.5 L2.70 11.62"/>
-      <path d="M16.33 14.5 L16.32 20.25"/>
+      <path d="${HEX}"/>
+      <path d="${CHECK}"/>
+    </svg>`;
+
+  /** The same mark with the hexagon filled — used for the all-clear state. */
+  const markSolid = (size = 44) =>
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+      aria-hidden="true" focusable="false">
+      <path d="${HEX}" fill="currentColor" fill-opacity="0.14"/>
+      <path d="${CHECK}" stroke-width="2"/>
     </svg>`;
 
   LAO.icons = {
-    aperture,
-    apertureOpen,
+    mark,
+    markSolid,
 
     // Lens glyphs -----------------------------------------------------------
     contrast: (s = 16) =>

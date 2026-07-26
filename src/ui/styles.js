@@ -423,10 +423,39 @@ svg { display: block; flex: none; }
   transition: transform var(--lao-t-base) var(--lao-ease-soft);
 }
 
+/* The overview is a flex column so the closing blocks can be pushed to the
+   foot of the panel when the list is short. Without this, margin-top:auto
+   silently computes to 0 and they ride up under the content. */
+.lao-view--home { display: flex; flex-direction: column; }
+.lao-view--home > * { flex: none; }
+
 /* The two deeper views. Quieter than the issue list so they never compete
    with it for attention. */
 .lao-items--quiet .lao-item-title { font-weight: 400; color: var(--lao-text-muted); }
-.lao-explore { margin-top: auto; padding-bottom: var(--lao-s4); }
+.lao-explore { margin-top: auto; }
+
+/* --------------------------------------------------------------- coverage */
+
+/* The denominator behind the headline. Deliberately quiet — it is reassurance
+   that the scan was thorough, not a headline of its own. */
+.lao-coverage {
+  margin: var(--lao-s4) var(--lao-s4) 0;
+  padding: var(--lao-s3) 0 var(--lao-s5);
+  border-top: 1px solid var(--lao-line);
+  display: grid; gap: 3px;
+}
+.lao-coverage-label {
+  font-size: var(--lao-size-micro);
+  font-weight: 600; letter-spacing: 0.085em; text-transform: uppercase;
+  color: var(--lao-text-faint);
+}
+.lao-coverage-line {
+  font-size: var(--lao-size-meta);
+  color: var(--lao-text-muted);
+  line-height: 1.7;
+}
+.lao-coverage-line b { color: var(--lao-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.lao-sep { padding: 0 6px; color: var(--lao-line-strong); }
 
 /* ------------------------------------------------------------- all clear */
 
@@ -457,11 +486,6 @@ svg { display: block; flex: none; }
 }
 .lao-clear-title { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
 .lao-clear p { font-size: var(--lao-size-body); color: var(--lao-text-muted); max-width: 30ch; }
-.lao-clear-detail {
-  font-size: var(--lao-size-meta); color: var(--lao-text-faint);
-  padding-top: var(--lao-s2); border-top: 1px solid var(--lao-line);
-  width: 100%; line-height: 1.7;
-}
 
 /* ============================================================ sub screens */
 

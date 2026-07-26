@@ -1,6 +1,6 @@
 /**
- * Generates the extension icons from the same aperture geometry the panel uses,
- * so the toolbar mark and the in-panel mark are literally the same drawing.
+ * Generates the extension icons: a rounded pointy-top hexagon with a check
+ * knocked out of it, matching the supplied brand mark.
  *
  *   node tools/make-icons.mjs
  *
@@ -16,25 +16,26 @@ const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'icons');
 
 /* ------------------------------------------------------------------ colour */
 
-const INK = [0x14, 0x16, 0x1c];
-const AQUA = [0x5f, 0xdb, 0xe6];
+const BLUE = [0x4e, 0x6b, 0xf5];
+const WHITE = [0xff, 0xff, 0xff];
 
-/* ------------------------------------------------------------- geometry (24u) */
+/* --------------------------------------------------------- geometry (24u) */
 
 const C = { x: 12, y: 12 };
-const RING_R = 9.25;
+const CORNER = 2.6;          // Corner radius of the hexagon.
+const R = 12.05 - CORNER;    // Circumradius of the *inset* polygon.
 
-const HEX = [
-  [12, 7], [16.33, 9.5], [16.33, 14.5], [12, 17], [7.67, 14.5], [7.67, 9.5],
+/** Pointy-top regular hexagon: a vertex at 12 o'clock, flats left and right. */
+const HEX = [90, 150, 210, 270, 330, 30].map((deg) => {
+  const t = (deg * Math.PI) / 180;
+  return [C.x + R * Math.cos(t), C.y - R * Math.sin(t)];
+});
+
+/** The check: short down-stroke into a long up-stroke. */
+const CHECK = [
+  [[7.4, 12.3], [10.7, 15.7]],
+  [[10.7, 15.7], [17.0, 8.5]],
 ];
-
-const BLADES = [
-  [[12, 7], [16.98, 4.13]],
-  [[7.67, 14.5], [2.70, 11.62]],
-  [[16.33, 14.5], [16.32, 20.25]],
-];
-
-const hexEdges = HEX.map((p, i) => [p, HEX[(i + 1) % HEX.length]]);
 
 /* --------------------------------------------------------------- distances */
 
@@ -47,67 +48,75 @@ function distToSegment(px, py, [ax, ay], [bx, by]) {
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-const distToRing = (px, py) => Math.abs(Math.hypot(px - C.x, py - C.y) - RING_R);
+/**
+ * Exact signed distance to a convex polygon: negative inside, positive
+ * outside. Inside, the nearest edge plane is the answer; outside, the nearest
+ * edge segment is. Subtracting a constant then rounds every corner evenly.
+ */
+function sdConvexPolygon(px, py, poly) {
+  let inside = true;
+  let maxPlane = -Infinity;
+  let minEdge = Infinity;
 
-/** Signed distance to a rounded square covering the whole 24u tile. */
-function roundedRectSD(px, py, inset, radius) {
-  const half = 12 - inset;
-  const qx = Math.abs(px - 12) - (half - radius);
-  const qy = Math.abs(py - 12) - (half - radius);
-  const ox = Math.max(qx, 0);
-  const oy = Math.max(qy, 0);
-  return Math.hypot(ox, oy) + Math.min(Math.max(qx, qy), 0) - radius;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const ex = b[0] - a[0];
+    const ey = b[1] - a[1];
+    const len = Math.hypot(ex, ey) || 1;
+    // HEX is wound counter-clockwise in screen space (y grows downward), so the
+    // outward normal is the edge rotated the other way from the usual formula.
+    const nx = -ey / len;
+    const ny = ex / len;
+    const plane = (px - a[0]) * nx + (py - a[1]) * ny;
+    if (plane > 0) inside = false;
+    maxPlane = Math.max(maxPlane, plane);
+    minEdge = Math.min(minEdge, distToSegment(px, py, a, b));
+  }
+  return inside ? maxPlane : minEdge;
 }
 
 /* --------------------------------------------------------------- rasterise */
 
 function render(size) {
-  // Below 40px the blades and the hexagon collide into mush; drop the blades
-  // and fatten the remaining strokes so the mark stays a legible aperture.
-  const detailed = size >= 40;
-  const stroke = detailed ? 1.45 : size >= 28 ? 1.9 : 2.3;
+  // The check has to thicken as the icon shrinks or it disappears into the fill.
+  const stroke = size >= 96 ? 2.9 : size >= 48 ? 3.2 : size >= 32 ? 3.6 : 4.0;
   const half = stroke / 2;
 
-  const SS = 4;                       // supersamples per axis
-  const scale = 24 / size;            // pixel -> 24u
+  const SS = 4;
+  const scale = 24 / size;
   const px = Buffer.alloc(size * size * 4);
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      let bg = 0;
-      let fg = 0;
+      let hex = 0;
+      let check = 0;
 
       for (let sy = 0; sy < SS; sy++) {
         for (let sx = 0; sx < SS; sx++) {
           const ux = (x + (sx + 0.5) / SS) * scale;
           const uy = (y + (sy + 0.5) / SS) * scale;
 
-          if (roundedRectSD(ux, uy, 0.35, size >= 48 ? 5.4 : 4.6) <= 0) bg++;
+          if (sdConvexPolygon(ux, uy, HEX) - CORNER <= 0) hex++;
 
-          let d = distToRing(ux, uy);
-          for (const [a, b] of hexEdges) d = Math.min(d, distToSegment(ux, uy, a, b));
-          if (detailed) {
-            for (const [a, b] of BLADES) d = Math.min(d, distToSegment(ux, uy, a, b));
-          }
-          if (d <= half) fg++;
+          let d = Infinity;
+          for (const [a, b] of CHECK) d = Math.min(d, distToSegment(ux, uy, a, b));
+          if (d <= half) check++;
         }
       }
 
       const total = SS * SS;
-      const bgA = bg / total;
-      const fgA = fg / total;
+      const hexA = hex / total;
+      if (hexA === 0) continue;
+
+      // The check is knocked out of the hexagon, so it never spills past the
+      // silhouette even where the stroke would otherwise overshoot an edge.
+      const checkA = Math.min(check / total, hexA);
       const i = (y * size + x) * 4;
-
-      // Source-over: aqua mark on an ink tile, both over transparency.
-      // Composite premultiplied, then unpremultiply for straight-alpha PNG.
-      const outA = fgA + bgA * (1 - fgA);
-      if (outA === 0) continue;
-
       for (let ch = 0; ch < 3; ch++) {
-        const premult = AQUA[ch] * fgA + INK[ch] * bgA * (1 - fgA);
-        px[i + ch] = Math.round(Math.max(0, Math.min(255, premult / outA)));
+        px[i + ch] = Math.round(BLUE[ch] * (1 - checkA / hexA) + WHITE[ch] * (checkA / hexA));
       }
-      px[i + 3] = Math.round(outA * 255);
+      px[i + 3] = Math.round(hexA * 255);
     }
   }
   return px;
@@ -150,10 +159,9 @@ function encodePng(size, rgba) {
   ihdr[11] = 0;  // adaptive filtering
   ihdr[12] = 0;  // no interlace
 
-  // One filter byte (type 0) per scanline.
   const raw = Buffer.alloc((size * 4 + 1) * size);
   for (let y = 0; y < size; y++) {
-    raw[y * (size * 4 + 1)] = 0;
+    raw[y * (size * 4 + 1)] = 0; // filter type 0 per scanline
     rgba.copy(raw, y * (size * 4 + 1) + 1, y * size * 4, (y + 1) * size * 4);
   }
 
@@ -173,3 +181,15 @@ for (const size of [16, 32, 48, 128]) {
   writeFileSync(file, encodePng(size, render(size)));
   console.log(`wrote ${file}`);
 }
+
+/* A vector master, so the mark can be re-cut at any size. */
+const hexPath = HEX.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`).join(' ') + ' Z';
+writeFileSync(join(OUT, 'mark.svg'),
+`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <path d="${hexPath}" fill="#4E6BF5" stroke="#4E6BF5" stroke-width="${CORNER * 2}"
+        stroke-linejoin="round"/>
+  <path d="M7.4 12.3 L10.7 15.7 L17.0 8.5" fill="none" stroke="#FFFFFF" stroke-width="2.9"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+`);
+console.log(`wrote ${join(OUT, 'mark.svg')}`);

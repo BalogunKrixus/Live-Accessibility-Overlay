@@ -82,7 +82,7 @@
 
       const head = el('div', { class: 'lao-head' },
         el('div', { class: 'lao-mark' },
-          el('span', { svg: icons.aperture(21), 'aria-hidden': 'true' }),
+          el('span', { svg: icons.mark(21), 'aria-hidden': 'true' }),
           el('span', { class: 'lao-wordmark' }, el('b', { text: 'Accessibility check' }))),
         el('div', { class: 'lao-head-actions' }, this.themeBtn, closeBtn));
 
@@ -209,7 +209,7 @@
         }
       }
 
-      frag.append(this._explore());
+      frag.append(this._explore(), this._coverage());
       this.homeView.replaceChildren(frag);
     }
 
@@ -242,16 +242,39 @@
     }
 
     _allClear() {
-      const r = this.state.results;
+      // The counts live in the coverage strip at the foot of the screen, in the
+      // same place they appear when there *are* issues, so they are never said
+      // twice and never move.
       return el('div', { class: 'lao-clear' },
-        el('div', { class: 'lao-clear-mark' }, el('span', { svg: icons.apertureOpen(46) })),
+        el('div', { class: 'lao-clear-mark' }, el('span', { svg: icons.markSolid(46) })),
         el('div', {},
           el('h2', { class: 'lao-clear-title', text: 'Nothing to fix' }),
-          el('p', { text: 'We checked the text, images, headings and keyboard order on this page. It all looks good.' })),
-        el('p', {
-          class: 'lao-clear-detail',
-          text: `${r.contrast.scanned} pieces of text · ${r.images.scanned} images · ${r.headings.scanned} headings · ${r.tabs.scanned} keyboard stops`,
-        }));
+          el('p', { text: 'We checked the text, images, headings and keyboard order on this page. It all looks good.' })));
+    }
+
+    /**
+     * What the scan actually looked at. It is the denominator behind the
+     * headline: "5 things to fix" means very different things over 12 pieces of
+     * text and over 400.
+     */
+    _coverage() {
+      const r = this.state.results;
+      const bits = [
+        [r.contrast.scanned, 'pieces of text'],
+        [r.images.scanned, 'images'],
+        [r.headings.scanned, 'headings'],
+        [r.tabs.scanned, 'keyboard stops'],
+      ];
+
+      const line = el('p', { class: 'lao-coverage-line' });
+      bits.forEach(([n, label], i) => {
+        if (i) line.append(el('span', { class: 'lao-sep', text: '·', 'aria-hidden': 'true' }));
+        line.append(el('b', { text: String(n) }), document.createTextNode(` ${label}`));
+      });
+
+      return el('div', { class: 'lao-coverage' },
+        el('h3', { class: 'lao-coverage-label', text: 'Checked on this page' }),
+        line);
     }
 
     /** The two deeper views, kept out of the main flow so they never demand attention. */
