@@ -142,11 +142,13 @@ if (problems.length) {
   process.exit(1);
 }
 
-rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST, { recursive: true });
 
 const zipName = `live-accessibility-overlay-v${manifest.version}.zip`;
 const zipPath = join(DIST, zipName);
+// Replace only the archive. Wiping all of dist/ would also delete the listing
+// images from tools/store-assets.mjs, which are slow to regenerate.
+rmSync(zipPath, { force: true });
 const args = ['-q', '-r', '-X', zipPath, ...SHIP, '-x', '*.svg', '.DS_Store', '__MACOSX/*'];
 execFileSync('zip', args, { cwd: ROOT });
 
