@@ -561,15 +561,88 @@ svg { display: block; flex: none; }
 }
 .lao-prose { font-size: var(--lao-size-body); color: var(--lao-text-muted); line-height: 1.6; }
 
-/* Evidence: the real thing, shown rather than described. */
-.lao-sample {
-  display: grid; gap: 4px;
-  padding: var(--lao-s5) var(--lao-s4);
-  border-radius: var(--lao-r-md);
+/* ------------------------------------------------------- contrast readout */
+
+/* The score answers "is this bad and by how much", the swatches answer "which
+   colours", and the specimen shows the pairing. In that order: rendering the
+   pairing full-bleed first meant a near-white-on-white failure looked like an
+   empty box rather than like evidence. */
+.lao-contrast {
   border: 1px solid var(--lao-line);
+  border-radius: var(--lao-r-md);
+  overflow: hidden;
 }
-.lao-sample-lg { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; }
-.lao-sample-sm { font-size: var(--lao-size-body); }
+
+.lao-contrast-score {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--lao-s3);
+  padding: var(--lao-s3) var(--lao-s4);
+  background: var(--lao-surface-sunken);
+  border-bottom: 1px solid var(--lao-line);
+}
+.lao-score-figure { display: flex; align-items: baseline; gap: 2px; }
+.lao-score-figure b {
+  font-size: 26px; font-weight: 650;
+  letter-spacing: -0.03em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.lao-score-figure span { font-size: var(--lao-size-meta); color: var(--lao-text-muted); }
+
+.lao-score-side { display: grid; gap: 3px; justify-items: end; }
+.lao-score-need { font-size: var(--lao-size-micro); color: var(--lao-text-faint); }
+
+.lao-verdict {
+  font-size: var(--lao-size-micro); font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: var(--lao-r-pill);
+  background: var(--lao-critical-wash); color: var(--lao-critical);
+  white-space: nowrap;
+}
+.lao-verdict[data-verdict="aa"],
+.lao-verdict[data-verdict="aaa"] { background: var(--lao-brand-wash); color: var(--lao-brand); }
+
+/* Both colours, named and spelled out. */
+.lao-contrast-colours { display: grid; }
+.lao-swatch-row {
+  display: grid; grid-template-columns: auto 1fr auto;
+  align-items: center; gap: var(--lao-s3);
+  padding: 9px var(--lao-s4);
+}
+.lao-swatch-row + .lao-swatch-row { border-top: 1px solid var(--lao-line); }
+
+/* A ring on both sides of the edge, so a white chip stays visible on a light
+   panel and a near-black one stays visible on a dark panel. */
+.lao-swatch-chip {
+  width: 26px; height: 20px; border-radius: 5px;
+  border: 1px solid var(--lao-line-strong);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.lao-swatch-label { font-size: var(--lao-size-meta); color: var(--lao-text-muted); }
+.lao-swatch-hex {
+  font-family: var(--lao-mono); font-size: var(--lao-size-meta);
+  font-weight: 600; letter-spacing: 0.02em;
+}
+
+/* The specimen, demoted to a strip and always bounded by a border so an
+   unreadable pairing reads as the point rather than as a rendering fault. */
+.lao-specimen {
+  display: grid; grid-template-columns: auto 1fr;
+  align-items: center; gap: var(--lao-s3);
+  padding: 9px var(--lao-s4);
+  border-top: 1px solid var(--lao-line);
+}
+.lao-specimen-label {
+  font-size: var(--lao-size-micro); color: var(--lao-text-faint);
+  text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600;
+  white-space: nowrap;
+}
+.lao-specimen-box {
+  padding: 7px 11px;
+  border-radius: var(--lao-r-sm);
+  border: 1px solid var(--lao-line-strong);
+  font-size: var(--lao-size-body); font-weight: 500;
+  text-align: center;
+}
 
 .lao-quote {
   display: grid; gap: 4px;
@@ -612,6 +685,11 @@ svg { display: block; flex: none; }
   font-weight: 600; letter-spacing: 0.01em;
 }
 .lao-swap-note { font-size: var(--lao-size-micro); color: var(--lao-text-faint); }
+.lao-swap-pass { color: var(--lao-brand); font-weight: 600; }
+.lao-swap-copied {
+  font-size: var(--lao-size-micro); font-weight: 700;
+  color: var(--lao-brand); letter-spacing: 0.05em; text-transform: uppercase;
+}
 .lao-copied { color: var(--lao-brand); font-weight: 600; }
 .lao-copy-icon { color: var(--lao-text-faint); }
 
@@ -962,7 +1040,8 @@ svg { display: block; flex: none; }
 @media (forced-colors: active) {
   .lao-panel { border: 1px solid CanvasText; }
   .lao-mk-frame { forced-color-adjust: none; }
-  .lao-swap, .lao-places, .lao-sample, .lao-path-row { border: 1px solid CanvasText; }
+  .lao-swap, .lao-places, .lao-contrast, .lao-specimen-box, .lao-path-row,
+  .lao-swatch-chip { border: 1px solid CanvasText; }
   :where(button, [tabindex]):focus-visible { outline: 2px solid Highlight; }
 }
 `;

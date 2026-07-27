@@ -343,6 +343,45 @@ check('one at a time: going back clears the page', marking.afterBack === 0);
 check('one at a time: the mark is captioned in plain words',
   !!marking.caption && !/:1/.test(marking.caption), marking.caption);
 
+/* Contrast readout --------------------------------------------------------- */
+
+// The score, the verdict and both colour values have to be on the issue screen
+// — a specimen alone is useless when the pairing is near-white on white, which
+// renders as a blank box.
+const readout = await page.evaluate(async () => {
+  const app = globalThis.__LAO__.app;
+  const sr = app.shadow;
+  const i = app.panel.state.items.findIndex((x) => x.category === 'contrast');
+  app.panel.showIssue(i);
+  await new Promise((r) => setTimeout(r, 250));
+
+  const block = sr.querySelector('.lao-contrast');
+  const chips = [...sr.querySelectorAll('.lao-swatch-chip')];
+  const source = app.panel.state.items[i].targets[0].source;
+  const text = block?.textContent || '';
+  app.panel.showHome();
+  return {
+    present: !!block,
+    score: sr.querySelector('.lao-score-figure b')?.textContent,
+    verdict: sr.querySelector('.lao-verdict')?.textContent,
+    hexes: [...sr.querySelectorAll('.lao-swatch-hex')].map((n) => n.textContent),
+    expected: [source.fgHex, source.bgHex],
+    // Every chip needs a border, or a white swatch vanishes on a light panel.
+    chipsBordered: chips.length === 2 &&
+      chips.every((c) => parseFloat(getComputedStyle(c).borderTopWidth) > 0),
+    mentionsRequirement: /Needs \d/.test(text),
+  };
+});
+check('contrast readout: shown on the issue screen', readout.present);
+check('contrast readout: leads with the score', /^\d+(\.\d+)?$/.test(readout.score || ''), readout.score);
+check('contrast readout: states pass or fail plainly',
+  /FAILS|PASSES/i.test(readout.verdict || ''), readout.verdict);
+check('contrast readout: names both colours',
+  JSON.stringify(readout.hexes) === JSON.stringify(readout.expected),
+  readout.hexes.join(' on '));
+check('contrast readout: swatches are bordered so white stays visible', readout.chipsBordered);
+check('contrast readout: states the threshold it is measured against', readout.mentionsRequirement);
+
 /* Icons actually render ---------------------------------------------------- */
 
 // Icon markup is parsed as XML. Without an xmlns declaration the <svg> lands in

@@ -461,12 +461,7 @@
     /** The thing itself: the failing colours, the current alt text, the heading. */
     _evidence(item, source) {
       if (item.category === 'contrast' && source && !source.unmeasurable) {
-        return el('div', {
-          class: 'lao-sample',
-          style: `background:${source.bgHex};color:${source.fgHex}`,
-        },
-          el('span', { class: 'lao-sample-lg', text: 'Text like this' }),
-          el('span', { class: 'lao-sample-sm', text: 'is hard for some people to read' }));
+        return this._contrastReadout(source);
       }
       if (item.category === 'images' && source?.altValue) {
         return el('div', { class: 'lao-quote' },
@@ -479,6 +474,54 @@
           el('span', { class: 'lao-quote-text', text: source.name }));
       }
       return null;
+    }
+
+    /**
+     * The score, both colours, and a specimen — in that order.
+     *
+     * The specimen used to be the whole block, rendered full-bleed in the real
+     * colours. For a near-white-on-white pairing that is a blank rectangle:
+     * literally accurate, and indistinguishable from the panel being broken. It
+     * is now a small labelled strip beneath the numbers, which are what tell you
+     * whether this is bad and by how much.
+     */
+    _contrastReadout(issue) {
+      const ratio = color.round(issue.ratio, 2);
+      const verdict = issue.ratio >= issue.requiredAAA ? 'aaa'
+        : issue.ratio >= issue.required ? 'aa' : 'fail';
+      const verdictLabel = { aaa: 'Passes AAA', aa: 'Passes AA', fail: 'Fails AA' }[verdict];
+
+      const swatchRow = (label, hex) =>
+        el('div', { class: 'lao-swatch-row' },
+          // A ring on both sides of the edge keeps a white chip visible on a
+          // light panel and a near-black one visible on a dark panel.
+          el('span', { class: 'lao-swatch-chip', style: `background:${hex}`, 'aria-hidden': 'true' }),
+          el('span', { class: 'lao-swatch-label', text: label }),
+          el('code', { class: 'lao-swatch-hex', text: hex }));
+
+      return el('div', { class: 'lao-contrast' },
+        el('div', { class: 'lao-contrast-score' },
+          el('div', { class: 'lao-score-figure' },
+            el('b', { text: String(ratio) }),
+            el('span', { text: ': 1' })),
+          el('div', { class: 'lao-score-side' },
+            el('span', { class: 'lao-verdict', data: { verdict }, text: verdictLabel }),
+            el('span', {
+              class: 'lao-score-need',
+              text: `Needs ${issue.required}:1${issue.large ? ' (large text)' : ''}`,
+            }))),
+
+        el('div', { class: 'lao-contrast-colours' },
+          swatchRow('Text', issue.fgHex),
+          swatchRow('Background', issue.bgHex)),
+
+        el('div', { class: 'lao-specimen' },
+          el('span', { class: 'lao-specimen-label', text: 'How it looks' }),
+          el('span', {
+            class: 'lao-specimen-box',
+            style: `background:${issue.bgHex};color:${issue.fgHex}`,
+            text: 'Text like this',
+          })));
     }
 
     _howToFix(item, source) {
@@ -515,7 +558,12 @@
             el('span', { class: 'lao-chip-colour', style: `background:${hex}` })),
           el('span', { class: 'lao-swap-body' },
             el('b', { class: 'lao-swap-hex', text: hex }),
-            el('span', { class: 'lao-swap-note', text: 'Tap to copy' })),
+            // The score the change buys you, so the fix is judged the same way
+            // the problem was.
+            el('span', { class: 'lao-swap-note' },
+              `${color.round(best.ratio, 2)}:1 · `,
+              el('span', { class: 'lao-swap-pass', text: 'passes AA' })),
+            el('span', { class: 'lao-swap-copied', text: 'Copied', hidden: true })),
           el('span', { class: 'lao-copy-icon', svg: icons.copy(14), 'aria-hidden': 'true' })));
         return block;
       }
@@ -578,13 +626,17 @@
     async _copy(text, button) {
       try {
         await navigator.clipboard.writeText(text);
+        // Swap between two elements rather than rewriting one: the note carries
+        // the ratio and its verdict, which overwriting would destroy.
         const note = button.querySelector('.lao-swap-note');
-        if (note) {
-          note.textContent = 'Copied';
-          note.classList.add('lao-copied');
-          setTimeout(() => {
-            note.textContent = 'Tap to copy';
-            note.classList.remove('lao-copied');
+        const done = button.querySelector('.lao-swap-copied');
+        if (note && done) {
+          note.hidden = true;
+          done.hidden = false;
+          clearTimeout(this._copyTimer);
+          this._copyTimer = setTimeout(() => {
+            note.hidden = false;
+            done.hidden = true;
           }, 1500);
         }
         this._announce(`${text} copied`);
