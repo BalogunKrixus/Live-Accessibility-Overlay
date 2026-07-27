@@ -182,6 +182,28 @@ for (const size of [16, 32, 48, 128]) {
   console.log(`wrote ${file}`);
 }
 
+/**
+ * The store listing icon is a different asset from the toolbar icon.
+ *
+ * A toolbar icon should fill its box — it is tiny and needs every pixel. The
+ * Web Store's image guidelines ask for the artwork at 96x96 inside a 128x128
+ * frame, so icons sit on a consistent optical grid beside each other in the
+ * store. Same drawing, centred with transparent padding.
+ */
+function padded(outer, inner) {
+  const art = render(inner);
+  const out = Buffer.alloc(outer * outer * 4); // Transparent by default.
+  const offset = Math.round((outer - inner) / 2);
+  for (let y = 0; y < inner; y++) {
+    art.copy(out, ((y + offset) * outer + offset) * 4, y * inner * 4, (y + 1) * inner * 4);
+  }
+  return out;
+}
+
+const storeIcon = join(OUT, 'store-icon-128.png');
+writeFileSync(storeIcon, encodePng(128, padded(128, 96)));
+console.log(`wrote ${storeIcon}`);
+
 /* A vector master, so the mark can be re-cut at any size. */
 const hexPath = HEX.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`).join(' ') + ' Z';
 writeFileSync(join(OUT, 'mark.svg'),
