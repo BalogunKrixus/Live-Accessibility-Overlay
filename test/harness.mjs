@@ -343,6 +343,33 @@ check('one at a time: going back clears the page', marking.afterBack === 0);
 check('one at a time: the mark is captioned in plain words',
   !!marking.caption && !/:1/.test(marking.caption), marking.caption);
 
+/* Icons actually render ---------------------------------------------------- */
+
+// Icon markup is parsed as XML. Without an xmlns declaration the <svg> lands in
+// the null namespace: nothing throws, every button still has its label and
+// aria-attributes, and the UI renders with invisible controls. Assert the
+// elements are really in the SVG namespace and occupy space.
+const iconry = await page.evaluate(() => {
+  const sr = document.querySelector('live-accessibility-overlay').shadowRoot;
+  const svgs = [...sr.querySelectorAll('svg')];
+  const NS = 'http://www.w3.org/2000/svg';
+  const wrongNs = svgs.filter((n) => n.namespaceURI !== NS).length;
+  const zeroSized = svgs.filter((n) => {
+    const r = n.getBoundingClientRect();
+    return r.width === 0 || r.height === 0;
+  }).length;
+  // Every icon-only control must contain a drawn glyph, not just a label.
+  const iconButtons = [...sr.querySelectorAll('.lao-icon-btn, .lao-step-btn')];
+  const emptyButtons = iconButtons.filter((b) => !b.querySelector('svg')).length;
+  return { total: svgs.length, wrongNs, zeroSized, iconButtons: iconButtons.length, emptyButtons };
+});
+check('icons: rendered at all', iconry.total > 5, `${iconry.total} svg elements`);
+check('icons: in the SVG namespace', iconry.wrongNs === 0, `${iconry.wrongNs} in the wrong namespace`);
+check('icons: occupy space', iconry.zeroSized === 0, `${iconry.zeroSized} with a zero-sized box`);
+check('icons: every icon-only button has a glyph',
+  iconry.iconButtons > 0 && iconry.emptyButtons === 0,
+  `${iconry.emptyButtons} empty of ${iconry.iconButtons}`);
+
 /* Cross-browser API shim --------------------------------------------------- */
 
 // Under the Firefox stub, `chrome.*` is callback-based, so a regression that

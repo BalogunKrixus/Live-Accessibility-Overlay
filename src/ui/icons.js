@@ -6,8 +6,13 @@
   const LAO = (globalThis.__LAO__ ||= {});
   if (LAO.icons) return;
 
+  // The xmlns declaration is mandatory: these strings are parsed as XML by the
+  // panel, and without it the <svg> lands in the null namespace — no error is
+  // raised, and nothing renders.
+  const NS = 'http://www.w3.org/2000/svg';
+
   const svg = (body, size = 16, view = 24) =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 ${view} ${view}" fill="none" ` +
+    `<svg xmlns="${NS}" width="${size}" height="${size}" viewBox="0 0 ${view} ${view}" fill="none" ` +
     `stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" ` +
     `aria-hidden="true" focusable="false">${body}</svg>`;
 
@@ -27,7 +32,7 @@
   const CHECK = 'M8.1 12.2 L10.9 15.1 L16.2 8.9';
 
   const mark = (size = 20) =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
+    `<svg xmlns="${NS}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
       aria-hidden="true" focusable="false">
       <path d="${HEX}"/>
@@ -36,7 +41,7 @@
 
   /** The same mark with the hexagon filled — used for the all-clear state. */
   const markSolid = (size = 44) =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
+    `<svg xmlns="${NS}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
       aria-hidden="true" focusable="false">
       <path d="${HEX}" fill="currentColor" fill-opacity="0.14"/>
