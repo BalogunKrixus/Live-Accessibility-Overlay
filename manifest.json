@@ -4,9 +4,11 @@
   "version": "1.0.0",
   "description": "Find accessibility problems on any page, in plain language: contrast, headings, alt text and keyboard order. Checked locally.",
   "minimum_chrome_version": "111",
-
-  "permissions": ["activeTab", "scripting", "storage"],
-
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
   "action": {
     "default_title": "Live Accessibility Overlay — toggle (Alt+Shift+A)",
     "default_icon": {
@@ -16,21 +18,20 @@
       "128": "icons/icon-128.png"
     }
   },
-
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-
   "background": {
-    "service_worker": "src/background/service-worker.js"
+    "service_worker": "src/background/background.js"
   },
-
   "commands": {
     "toggle-overlay": {
-      "suggested_key": { "default": "Alt+Shift+A" },
+      "suggested_key": {
+        "default": "Alt+Shift+A"
+      },
       "description": "Toggle the accessibility overlay"
     }
   }

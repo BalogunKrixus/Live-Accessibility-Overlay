@@ -16,6 +16,14 @@
   const { util } = LAO;
   const STORAGE_KEY = 'lao:prefs';
 
+  /**
+   * Chrome's `chrome.*` returns promises under MV3; Firefox's is callback-based
+   * and only `browser.*` returns promises. Awaiting `chrome.*` in Firefox would
+   * silently resolve to undefined — preferences would never load and the ping
+   * handshake would never answer — so prefer `browser` where it exists.
+   */
+  const api = globalThis.browser ?? globalThis.chrome;
+
   class App {
     constructor() {
       this.prefs = {
@@ -76,7 +84,7 @@
 
     async _loadPrefs() {
       try {
-        const stored = await chrome.storage.local.get(STORAGE_KEY);
+        const stored = await api.storage.local.get(STORAGE_KEY);
         const saved = stored?.[STORAGE_KEY];
         // Only known keys are adopted, so a preference blob written by an older
         // version cannot reintroduce settings this build no longer has.
@@ -92,7 +100,7 @@
 
     _savePrefs() {
       try {
-        chrome.storage.local.set({ [STORAGE_KEY]: this.prefs });
+        api.storage.local.set({ [STORAGE_KEY]: this.prefs });
       } catch {
         /* Non-fatal. */
       }
@@ -169,7 +177,7 @@
       const tone = items.some((i) => i.tier === 'fix') ? 'fix' : items.length ? 'check' : 'clear';
 
       try {
-        chrome.runtime.sendMessage({ type: 'lao:badge', count: items.length, tone });
+        api.runtime.sendMessage({ type: 'lao:badge', count: items.length, tone });
       } catch {
         /* Extension context invalidated (reloaded); harmless. */
       }
@@ -255,7 +263,7 @@
   const app = new App();
   LAO.app = app;
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  api.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     switch (msg?.type) {
       case 'lao:ping':
         sendResponse({ type: 'lao:pong' });

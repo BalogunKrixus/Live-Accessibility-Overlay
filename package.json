@@ -5,17 +5,20 @@
   "description": "Chrome extension that surfaces accessibility problems on the live page, in context.",
   "type": "module",
   "scripts": {
-    "test": "npm run lint && npm run test:unit && npm run test:ext",
+    "test": "npm run lint && npm run test:unit && npm run test:unit:firefox-api && npm run test:ext",
     "test:unit": "node test/harness.mjs",
+    "test:unit:firefox-api": "LAO_API=firefox node test/harness.mjs",
+    "test:unit:gecko": "LAO_ENGINE=firefox node test/harness.mjs",
     "test:ext": "node test/extension.mjs",
     "shots": "node test/harness.mjs --shots",
     "icons": "node tools/make-icons.mjs",
     "lint": "node tools/check-syntax.mjs",
     "package": "node tools/package.mjs",
     "store-assets": "node tools/store-assets.mjs",
-    "verify-package": "node tools/package.mjs && rm -rf /tmp/lao-verify && mkdir -p /tmp/lao-verify && unzip -q dist/*.zip -d /tmp/lao-verify && LAO_EXT_DIR=/tmp/lao-verify node test/extension.mjs"
+    "verify-package": "node tools/package.mjs && rm -rf /tmp/lao-verify && mkdir -p /tmp/lao-verify && unzip -q dist/live-accessibility-overlay-chrome-*.zip -d /tmp/lao-verify && LAO_EXT_DIR=/tmp/lao-verify node test/extension.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.62.0"
+    "playwright": "^1.62.0",
+    "web-ext": "^10.5.0"
   }
 }

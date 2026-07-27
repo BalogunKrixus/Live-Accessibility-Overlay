@@ -20,13 +20,29 @@
 
   /* ------------------------------------------------------- tiny DOM helper */
 
+  /**
+   * Icon markup is authored in icons.js and never contains page content, but
+   * assigning it via innerHTML still trips the AMO reviewer's linter — and a
+   * warning a human has to adjudicate is a slower review for no benefit.
+   * Parsing once and cloning is safer, faster, and silent.
+   */
+  const svgCache = new Map();
+  function svgNode(markup) {
+    let parsed = svgCache.get(markup);
+    if (!parsed) {
+      parsed = new DOMParser().parseFromString(markup, 'image/svg+xml').documentElement;
+      svgCache.set(markup, parsed);
+    }
+    return document.importNode(parsed, true);
+  }
+
   function el(tag, props = {}, ...children) {
     const node = document.createElement(tag);
     for (const [k, v] of Object.entries(props)) {
       if (v === null || v === undefined || v === false) continue;
       if (k === 'class') node.className = v;
       else if (k === 'text') node.textContent = v;
-      else if (k === 'svg') node.innerHTML = v; // Icon markup only, authored here.
+      else if (k === 'svg') node.replaceChildren(svgNode(v)); // Authored icon markup.
       else if (k === 'on') for (const [ev, fn] of Object.entries(v)) node.addEventListener(ev, fn);
       else if (k === 'data') for (const [d, dv] of Object.entries(v)) node.dataset[d] = dv;
       else node.setAttribute(k, v === true ? '' : String(v));
@@ -162,8 +178,8 @@
 
     _syncThemeButton(mode) {
       const next = { system: 'light', light: 'dark', dark: 'system' }[mode];
-      this.themeBtn.innerHTML =
-        { system: icons.auto(16), light: icons.sun(16), dark: icons.moon(16) }[mode];
+      this.themeBtn.replaceChildren(
+        svgNode({ system: icons.auto(16), light: icons.sun(16), dark: icons.moon(16) }[mode]));
       const label = `Theme: ${mode === 'system' ? 'follows your system' : mode}. Switch to ${next}.`;
       this.themeBtn.setAttribute('aria-label', label);
       this.themeBtn.setAttribute('title', label);

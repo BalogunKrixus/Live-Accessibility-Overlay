@@ -5,7 +5,7 @@
  *
  *   node test/harness.mjs [--shots]
  */
-import { chromium } from 'playwright';
+import { chromium, firefox } from 'playwright';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -29,19 +29,44 @@ const RUNTIME = [
   'src/content/main.js',
 ];
 
-const CHROME_STUB = `
-  globalThis.chrome = {
-    storage: { local: {
-      _d: {},
-      get(k) { return Promise.resolve({ [k]: this._d[k] }); },
-      set(o) { Object.assign(this._d, o); return Promise.resolve(); },
-    }},
-    runtime: {
-      sendMessage() {},
-      onMessage: { addListener() {} },
-      lastError: null,
-    },
-  };
+/**
+ * The extension API, stubbed to match how each engine really exposes it.
+ *
+ * Chrome MV3 gives promise-based `chrome.*` and no `browser`. Firefox gives
+ * promise-based `browser.*` *and* a callback-based `chrome.*` for
+ * compatibility. Mirroring that difference here is what makes this suite able
+ * to catch the port's sharpest edge: awaiting `chrome.*` looks fine in Chrome
+ * and silently resolves to undefined in Firefox.
+ */
+const apiStub = (engine) => `
+  (() => {
+    const store = {};
+    // Real extension storage serialises, so it must not hand back a live
+    // reference — otherwise mutating an object after saving it also mutates
+    // what was "stored", and a broken round-trip looks like a working one.
+    const clone = (v) => JSON.parse(JSON.stringify(v));
+    const promised = {
+      storage: { local: {
+        get: (k) => Promise.resolve({ [k]: store[k] === undefined ? undefined : clone(store[k]) }),
+        set: (o) => { Object.assign(store, clone(o)); return Promise.resolve(); },
+      } },
+      runtime: { sendMessage: () => Promise.resolve(), onMessage: { addListener() {} } },
+    };
+
+    if (${engine === 'firefox'}) {
+      globalThis.browser = promised;
+      // Callback-based, exactly like Firefox: awaiting these yields undefined.
+      globalThis.chrome = {
+        storage: { local: {
+          get: (k, cb) => { cb && cb({ [k]: store[k] }); },
+          set: (o, cb) => { Object.assign(store, o); cb && cb(); },
+        } },
+        runtime: { sendMessage: (m, cb) => { cb && cb(); }, onMessage: { addListener() {} } },
+      };
+    } else {
+      globalThis.chrome = promised;
+    }
+  })();
 `;
 
 /* --------------------------------------------------------------- assertions */
@@ -53,7 +78,7 @@ const check = (name, pass, detail = '') => {
 };
 
 async function loadRuntime(page, fixture) {
-  await page.addInitScript(CHROME_STUB);
+  await page.addInitScript(apiStub(API_SHAPE));
   await page.goto(pathToFileURL(join(ROOT, 'test', fixture)).href);
   for (const file of RUNTIME) {
     await page.addScriptTag({ content: readFileSync(join(ROOT, file), 'utf8') });
@@ -91,8 +116,44 @@ const summarise = () => {
 
 /* -------------------------------------------------------------------- run */
 
-// /opt/pw-browsers/chromium is a symlink to the binary itself.
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+/**
+ * The audits and the whole panel are plain DOM and CSS, so this suite can run
+ * in Gecko as well as Blink — and Gecko is where a cross-browser port actually
+ * breaks. LAO_ENGINE=firefox runs the identical assertions there, including the
+ * palette self-audit, which depends on how the engine resolves colours.
+ *
+ *   LAO_ENGINE=firefox node test/harness.mjs
+ */
+const ENGINE = process.env.LAO_ENGINE || 'chromium';
+
+/**
+ * The *shape* of the extension API, independent of the rendering engine.
+ * LAO_API=firefox exercises Firefox's callback-based `chrome.*` plus
+ * promise-based `browser.*` while still running in Chromium, so the shim can be
+ * verified on a machine that has no Firefox build installed.
+ */
+const API_SHAPE = process.env.LAO_API || ENGINE;
+const launchers = { chromium, firefox };
+if (!launchers[ENGINE]) {
+  console.error(`Unknown LAO_ENGINE "${ENGINE}" — use chromium or firefox.`);
+  process.exit(1);
+}
+console.log(`\nEngine: ${ENGINE}${API_SHAPE !== ENGINE ? ` (extension API shaped like ${API_SHAPE})` : ''}`);
+
+let browser;
+try {
+  browser = await launchers[ENGINE].launch(
+    // The bundled Chromium lives at a known path; Firefox comes from Playwright's
+    // own download, so let it resolve that itself.
+    ENGINE === 'chromium' ? { executablePath: '/opt/pw-browsers/chromium' } : {},
+  );
+} catch (err) {
+  console.error(
+    `\nCould not launch ${ENGINE}: ${err.message.split('\n')[0]}\n` +
+    (ENGINE === 'firefox' ? 'Install it with:  npx playwright install firefox\n' : ''),
+  );
+  process.exit(1);
+}
 const context = await browser.newContext({ viewport: { width: 1440, height: 940 }, deviceScaleFactor: 2 });
 const page = await context.newPage();
 page.on('console', (m) => { if (m.type() === 'error') console.log('  [page error]', m.text()); });
@@ -281,6 +342,28 @@ check('one at a time: stepping to the next issue still marks only one',
 check('one at a time: going back clears the page', marking.afterBack === 0);
 check('one at a time: the mark is captioned in plain words',
   !!marking.caption && !/:1/.test(marking.caption), marking.caption);
+
+/* Cross-browser API shim --------------------------------------------------- */
+
+// Under the Firefox stub, `chrome.*` is callback-based, so a regression that
+// reaches for it and awaits the result resolves to undefined and preferences
+// silently stop persisting. Round-tripping through the app proves the shim
+// picked the promise-based namespace for whichever engine is running.
+const shim = await page.evaluate(async () => {
+  const app = globalThis.__LAO__.app;
+  app.prefs.theme = 'dark';
+  app._savePrefs();
+  app.prefs.theme = 'system';
+  await app._loadPrefs();
+  const restored = app.prefs.theme;
+  app.prefs.theme = 'system';
+  app._applyPrefs();
+  app._savePrefs();
+  return { restored, engineExposesBrowser: !!globalThis.browser };
+});
+check('api shim: preferences round-trip through the promise-based namespace',
+  shim.restored === 'dark',
+  `browser namespace present: ${shim.engineExposesBrowser}`);
 
 /* Panel accessibility ----------------------------------------------------- */
 const a11y = await page.evaluate(() => {
@@ -561,7 +644,7 @@ if (WANT_SHOTS) {
 console.log('\n── Fixture with nothing to flag ─────────────────────────────');
 const page2 = await context.newPage();
 page2.on('pageerror', (e) => console.log('  [page exception]', e.message));
-await page2.addInitScript(CHROME_STUB);
+await page2.addInitScript(apiStub(API_SHAPE));
 await page2.goto(pathToFileURL(join(ROOT, 'test', 'fixture-clean.html')).href);
 for (const file of RUNTIME) {
   await page2.addScriptTag({ content: readFileSync(join(ROOT, file), 'utf8') });
@@ -629,7 +712,7 @@ const rmContext = await browser.newContext({
 });
 const rmPage = await rmContext.newPage();
 rmPage.on('pageerror', (e) => console.log('  [page exception]', e.message));
-await rmPage.addInitScript(CHROME_STUB);
+await rmPage.addInitScript(apiStub(API_SHAPE));
 await rmPage.goto(pathToFileURL(join(ROOT, 'test', 'fixture-clean.html')).href);
 for (const file of RUNTIME) {
   await rmPage.addScriptTag({ content: readFileSync(join(ROOT, file), 'utf8') });
@@ -666,7 +749,7 @@ check('reduced motion: the ring is still rendered, not just removed',
 console.log('\n── Heavy page ───────────────────────────────────────────────');
 const bigPage = await context.newPage();
 bigPage.on('pageerror', (e) => console.log('  [page exception]', e.message));
-await bigPage.addInitScript(CHROME_STUB);
+await bigPage.addInitScript(apiStub(API_SHAPE));
 await bigPage.goto('about:blank');
 // A deliberately awkward page: deep nesting, a web component with an open
 // shadow root, thousands of text nodes, and translucent stacked backgrounds.
@@ -743,7 +826,7 @@ await browser.close();
 /* ------------------------------------------------------------------ report */
 
 const failed = results.filter((r) => !r.pass);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
+console.log(`\n${results.length - failed.length}/${results.length} checks passed in ${ENGINE}`);
 if (failed.length) {
   console.log('\nFailures:');
   for (const f of failed) console.log(`  · ${f.name}${f.detail ? ` — ${f.detail}` : ''}`);

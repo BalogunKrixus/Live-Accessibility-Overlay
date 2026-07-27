@@ -3,7 +3,7 @@
  *
  * The unit harness loads the runtime files directly, which proves the audits
  * work but says nothing about whether the *extension* works: manifest validity,
- * service-worker startup, injection order, and the message handshake are all
+ * background-script startup, injection order, and the message handshake are all
  * untested by it. This loads the real unpacked extension in Chromium and drives
  * the real injection path.
  *
@@ -72,7 +72,7 @@ check('manifest: permissions are minimal',
 // The service worker's injection list is the single source of truth for load
 // order; if a file is added to src/ and not to that list, injection breaks at
 // runtime with a confusing undefined error. Verify every entry resolves.
-const swSource = readFileSync(join(dir, 'src/background/service-worker.js'), 'utf8');
+const swSource = readFileSync(join(dir, 'src/background/background.js'), 'utf8');
 const runtimeList = [...swSource.matchAll(/'(src\/[^']+\.js)'/g)].map((m) => m[1]);
 let allExist = true;
 for (const file of runtimeList) {
@@ -96,7 +96,7 @@ const context = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir()
 
 let worker = context.serviceWorkers()[0];
 if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 15000 });
-check('service worker: registered and running', !!worker, worker?.url().split('/').pop());
+check('background: service worker registered and running', !!worker, worker?.url().split('/').pop());
 
 const page = await context.newPage();
 const pageErrors = [];

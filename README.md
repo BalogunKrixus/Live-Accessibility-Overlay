@@ -1,7 +1,7 @@
 # Live Accessibility Overlay
 
-A Chrome extension that shows accessibility problems **on the live page, in context** — not
-in a report you read afterwards.
+A **Chrome and Firefox** extension that shows accessibility problems **on the live page, in
+context** — not in a report you read afterwards.
 
 It checks four things — contrast, heading structure, alt text and keyboard order — and
 presents them the way a spell-checker does: one problem at a time, in plain words, with the
@@ -14,15 +14,37 @@ read a page it was not explicitly invited into.
 
 ```bash
 git clone <this repo> && cd Live-Accessibility-Overlay
+npm install && npm run package     # writes dist/chrome/ and dist/firefox/
 ```
 
-1. Open `chrome://extensions`
-2. Turn on **Developer mode**
-3. **Load unpacked** → select this folder
-4. Open any page and click the toolbar icon, or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>
+**Chrome** — `chrome://extensions` → Developer mode → **Load unpacked** → `dist/chrome/`
 
-There is no build step. The extension is plain ES5-compatible JavaScript with no bundler and
-no dependencies; the `devDependencies` exist only to run the tests.
+**Firefox** — `about:debugging` → This Firefox → **Load Temporary Add-on** → pick
+`dist/firefox/manifest.json`
+
+Then open any page and click the toolbar icon, or press
+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>.
+
+There is no bundler and no runtime dependencies; `devDependencies` exist only for the tests
+and the AMO linter.
+
+### One codebase, two targets
+
+`src/` is shared verbatim. `manifest.json` is the single source of truth, and
+`tools/package.mjs` derives the Firefox manifest from it — there is no second manifest to
+drift. The only real differences:
+
+| | Chrome | Firefox |
+|---|---|---|
+| Background | `service_worker` | `scripts` (event page) |
+| Extension API | `chrome.*` returns promises | only `browser.*` does |
+| Manifest extras | `minimum_chrome_version` | `browser_specific_settings.gecko` |
+
+The API difference is the sharp one: awaiting `chrome.*` works in Chrome and silently
+resolves to `undefined` in Firefox, so preferences would never load and the message
+handshake would never answer. Both entry points resolve
+`globalThis.browser ?? globalThis.chrome` once, which is promise-based on either engine.
+`npm run package` fails the build if extension APIs are ever called on `chrome.` directly.
 
 ---
 
@@ -141,6 +163,7 @@ audited rather than silently under-reported.
 ## Privacy
 
 - `activeTab`, `scripting`, `storage`. **No host permissions**, no static content scripts.
+  The Firefox build additionally declares `data_collection_permissions: { required: ["none"] }`.
 - Nothing is injected into any page until you click the icon or press the shortcut.
 - No network calls of any kind. No analytics. Nothing persists but your theme and which side
   the panel sits on.
@@ -174,8 +197,10 @@ the accessibility tree, and every issue is reachable as a real control in the pa
 
 ```bash
 npm install
-npm test            # lint + unit/UI harness + packaged-extension E2E
-npm run shots       # regenerate test/shots/
+npm test                      # lint + UI harness (both API shapes) + packaged-extension E2E
+npm run package               # build + validate both store packages
+npm run test:unit:gecko       # run the UI harness in real Firefox (needs a Gecko build)
+npm run shots                 # regenerate test/shots/
 ```
 
 - **`tools/check-syntax.mjs`** — parses every file. The stylesheet is a template literal, and
@@ -191,9 +216,17 @@ npm run shots       # regenerate test/shots/
   issue titles that are plain sentences rather than ratios, nothing drawn on the page until
   something is selected, exactly one mark once it is, and 1,800 findings collapsing to a
   list of five rows.
-- **`test/extension.mjs`** (19 checks) — loads the real unpacked extension in Chromium and
-  drives the actual injection path: manifest, service worker, file order, message handshake,
-  storage round-trip, and isolated-world separation.
+- **`test/extension.mjs`** (23 checks) — loads the real unpacked extension in Chromium and
+  drives the actual injection path: manifest, background script, file order, message
+  handshake, badge, storage round-trip, and isolated-world separation. Point it at a built
+  package with `LAO_EXT_DIR` to verify the artifact that actually ships.
+- **Cross-browser.** The harness stubs the extension API in the shape each engine really
+  exposes it — promise-based `chrome.*` for Chrome, promise-based `browser.*` alongside
+  *callback-based* `chrome.*` for Firefox — so `LAO_API=firefox` catches the port's sharpest
+  edge without needing a Gecko build. `LAO_ENGINE=firefox` runs the identical assertions in
+  real Firefox, including the palette self-audit.
+- **`npm run package`** runs `web-ext lint`, the same linter AMO runs on submission, and
+  reports errors and warnings separately. Currently zero of both.
 
 `test/fixture-issues.html` contains deliberate, documented problems; `test/fixture-clean.html`
 must report exactly zero.

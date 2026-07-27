@@ -1,5 +1,8 @@
 /**
- * Live Accessibility Overlay — service worker.
+ * Live Accessibility Overlay — background script.
+ *
+ * Runs as a service worker in Chrome and as an event page in Firefox; both are
+ * non-persistent and this file uses no API specific to either.
  *
  * The extension holds no host permissions. Nothing is injected into any page
  * until the user explicitly asks for it (toolbar click or Alt+Shift+A), at
@@ -7,6 +10,14 @@
  * the privacy story absolute: the extension cannot read a page it was not
  * invited into, and no scan result ever leaves the tab it was measured in.
  */
+
+/**
+ * Chrome's `chrome.*` returns promises under MV3. Firefox's `chrome.*` is
+ * callback-based for compatibility and only `browser.*` returns promises, so
+ * awaiting `chrome.*` in Firefox yields undefined and fails silently.
+ * Preferring `browser` gives one promise-based API on both.
+ */
+const api = globalThis.browser ?? globalThis.chrome;
 
 // Injection order matters: each file attaches to a shared namespace on the
 // isolated world's globalThis, so dependencies must land first.
@@ -25,13 +36,21 @@ const RUNTIME = [
   'src/content/main.js',
 ];
 
-const PROTECTED = /^(chrome|edge|about|devtools|chrome-extension|moz-extension|view-source):/i;
-const WEBSTORE = /^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)/i;
+const PROTECTED =
+  /^(chrome|edge|about|devtools|chrome-extension|moz-extension|view-source|resource):/i;
 
-/** Pages Chrome refuses to script. Failing loudly here beats a silent no-op. */
+/**
+ * Sites both vendors reserve. Chrome blocks its own Web Store; Firefox blocks
+ * addons.mozilla.org and the Firefox accounts domain. Listing both is harmless
+ * on either browser and means one build behaves correctly on both.
+ */
+const RESTRICTED_SITES =
+  /^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore|addons\.mozilla\.org|addons\.cdn\.mozilla\.net|accounts\.firefox\.com)/i;
+
+/** Pages the browser refuses to script. Failing loudly beats a silent no-op. */
 function blockedReason(url = '') {
-  if (PROTECTED.test(url)) return 'Chrome does not allow extensions to run on browser pages.';
-  if (WEBSTORE.test(url)) return 'Chrome does not allow extensions to run on the Web Store.';
+  if (PROTECTED.test(url)) return 'Your browser does not allow extensions to run on its own pages.';
+  if (RESTRICTED_SITES.test(url)) return 'Your browser does not allow extensions to run on this site.';
   if (!url) return 'This tab has no page loaded yet.';
   return null;
 }
@@ -39,7 +58,7 @@ function blockedReason(url = '') {
 /** Ask the tab whether the runtime is already live. Never throws. */
 async function ping(tabId) {
   try {
-    const res = await chrome.tabs.sendMessage(tabId, { type: 'lao:ping' });
+    const res = await api.tabs.sendMessage(tabId, { type: 'lao:ping' });
     return res?.type === 'lao:pong';
   } catch {
     return false; // No receiver — not injected yet.
@@ -59,7 +78,7 @@ async function toggle(tab) {
     // Already running: let the content script own the open/close transition so
     // the exit animation plays instead of the DOM being ripped out.
     try {
-      await chrome.tabs.sendMessage(tab.id, { type: 'lao:toggle' });
+      await api.tabs.sendMessage(tab.id, { type: 'lao:toggle' });
     } catch {
       /* Tab navigated mid-flight; the next click re-injects. */
     }
@@ -67,12 +86,12 @@ async function toggle(tab) {
   }
 
   try {
-    await chrome.scripting.executeScript({
+    await api.scripting.executeScript({
       target: { tabId: tab.id, allFrames: false },
       files: RUNTIME,
       injectImmediately: true,
     });
-    await chrome.tabs.sendMessage(tab.id, { type: 'lao:open' });
+    await api.tabs.sendMessage(tab.id, { type: 'lao:open' });
   } catch (err) {
     await flashBadge(tab.id, '!', String(err?.message || err));
   }
@@ -80,12 +99,12 @@ async function toggle(tab) {
 
 async function flashBadge(tabId, text, title) {
   try {
-    await chrome.action.setBadgeText({ tabId, text });
-    await chrome.action.setBadgeBackgroundColor({ tabId, color: '#8A5A0B' });
-    await chrome.action.setTitle({ tabId, title: `Live Accessibility Overlay — ${title}` });
+    await api.action.setBadgeText({ tabId, text });
+    await api.action.setBadgeBackgroundColor({ tabId, color: '#8A5A0B' });
+    await api.action.setTitle({ tabId, title: `Live Accessibility Overlay — ${title}` });
     setTimeout(() => {
-      chrome.action.setBadgeText({ tabId, text: '' }).catch(() => {});
-      chrome.action
+      api.action.setBadgeText({ tabId, text: '' }).catch(() => {});
+      api.action
         .setTitle({ tabId, title: 'Live Accessibility Overlay — toggle (Alt+Shift+A)' })
         .catch(() => {});
     }, 4000);
@@ -94,11 +113,11 @@ async function flashBadge(tabId, text, title) {
   }
 }
 
-chrome.action.onClicked.addListener(toggle);
+api.action.onClicked.addListener(toggle);
 
-chrome.commands.onCommand.addListener(async (command) => {
+api.commands.onCommand.addListener(async (command) => {
   if (command !== 'toggle-overlay') return;
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await api.tabs.query({ active: true, currentWindow: true });
   toggle(tab);
 });
 
@@ -110,7 +129,7 @@ chrome.commands.onCommand.addListener(async (command) => {
  */
 const BADGE_COLOR = { fix: '#C22F4A', check: '#8A5A0B', clear: '#0C6F79' };
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type !== 'lao:badge' || !sender.tab?.id) return;
   const tabId = sender.tab.id;
   const { count = 0, tone = 'clear' } = msg;
@@ -118,11 +137,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // No issues means no badge. A "0" reads as a measurement someone has to
   // interpret; an empty icon reads as nothing to do.
   const text = count > 99 ? '99+' : count > 0 ? String(count) : '';
-  chrome.action.setBadgeText({ tabId, text }).catch(() => {});
-  chrome.action
+  api.action.setBadgeText({ tabId, text }).catch(() => {});
+  api.action
     .setBadgeBackgroundColor({ tabId, color: BADGE_COLOR[tone] || BADGE_COLOR.clear })
     .catch(() => {});
-  chrome.action.setBadgeTextColor?.({ tabId, color: '#FFFFFF' }).catch(() => {});
+  api.action.setBadgeTextColor?.({ tabId, color: '#FFFFFF' }).catch(() => {});
   sendResponse({ ok: true });
   return false;
 });
@@ -132,8 +151,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
  * loads; `info.url` also fires for in-page route changes in single-page apps,
  * where the count would otherwise sit there describing the previous view.
  */
-chrome.tabs.onUpdated.addListener((tabId, info) => {
+api.tabs.onUpdated.addListener((tabId, info) => {
   if (info.status === 'loading' || info.url) {
-    chrome.action.setBadgeText({ tabId, text: '' }).catch(() => {});
+    api.action.setBadgeText({ tabId, text: '' }).catch(() => {});
   }
 });
