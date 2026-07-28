@@ -373,7 +373,9 @@ const readout = await page.evaluate(async () => {
   };
 });
 check('contrast readout: shown on the issue screen', readout.present);
-check('contrast readout: leads with the score', /^\d+(\.\d+)?$/.test(readout.score || ''), readout.score);
+// Two decimals always: "1" beside "needs 3:1" reads as a rounding artefact.
+check('contrast readout: leads with the score, to two decimals',
+  /^\d+\.\d{2}$/.test(readout.score || ''), readout.score);
 check('contrast readout: states pass or fail plainly',
   /FAILS|PASSES/i.test(readout.verdict || ''), readout.verdict);
 check('contrast readout: names both colours',
@@ -768,6 +770,147 @@ if (WANT_SHOTS) {
   await page2.screenshot({ path: join(SHOTS, '11-allclear-dark.png'), clip: box });
   console.log('  shot  11-allclear-dark.png');
 }
+
+/* ------------------------------------------------- hero image backdrops */
+
+// A photo behind text is usually an <img> element, not a CSS background-image.
+// Walking background-color up the tree never touches it, so the walk used to
+// fall through to the page canvas and report white text on a white background:
+// a confident 1:1 that is simply wrong.
+console.log('\n── Text over an image element ───────────────────────────────');
+const heroPage = await context.newPage();
+heroPage.on('pageerror', (e) => console.log('  [page exception]', e.message));
+await loadRuntime(heroPage, 'fixture-hero.html');
+
+const hero = await heroPage.evaluate(() => {
+  const r = globalThis.__LAO__.app.results;
+  const find = (sel) => {
+    const el = document.querySelector(sel);
+    const i = r.contrast.issues.find((x) => x.element === el);
+    return i ? { unmeasurable: i.unmeasurable || null, fgHex: i.fgHex, bgHex: i.bgHex, ratio: i.ratio } : null;
+  };
+  return {
+    heading: find('.hero-copy h1'),
+    para: find('.hero-copy p'),
+    card: find('.card p'),
+    iconRow: find('.icon-row span'),
+    whiteOnWhite: r.contrast.issues.filter((i) => i.fgHex === '#FFFFFF' && i.bgHex === '#FFFFFF').length,
+  };
+});
+
+check('hero: white text on a photo is flagged as unmeasurable, not measured',
+  hero.heading?.unmeasurable === 'image', JSON.stringify(hero.heading));
+check('hero: the body copy over the photo is treated the same way',
+  hero.para?.unmeasurable === 'image', JSON.stringify(hero.para));
+check('hero: nothing is reported as #FFFFFF on #FFFFFF',
+  hero.whiteOnWhite === 0, `${hero.whiteOnWhite} such issues`);
+check('hero: an opaque card over the photo is still measured against the card',
+  hero.card && !hero.card.unmeasurable && hero.card.bgHex === '#FFFFFF',
+  JSON.stringify(hero.card));
+check('hero: a 40px icon beside a line of text is not treated as a backdrop',
+  hero.iconRow && !hero.iconRow.unmeasurable && hero.iconRow.bgHex === '#FFFFFF',
+  JSON.stringify(hero.iconRow));
+
+// An inferred background is not a measured one, and the readout has to admit
+// which one it is showing.
+const caveat = await heroPage.evaluate(() => {
+  const app = globalThis.__LAO__.app;
+  const issues = app.results.contrast.issues;
+  const forSel = (sel) => issues.find((i) => i.element === document.querySelector(sel));
+  const textOf = (issue) => (issue ? app.panel._contrastReadout(issue).textContent : '');
+  const bare = forSel('.bare');
+  const card = forSel('.card p');
+  return {
+    bareAssumed: !!bare?.assumedBackground,
+    cardAssumed: !!card?.assumedBackground,
+    bareText: textOf(bare),
+    cardText: textOf(card),
+  };
+});
+
+check('contrast readout: an inferred background is marked as inferred',
+  caveat.bareAssumed && /measured against the page background/i.test(caveat.bareText));
+check('contrast readout: a background the page actually sets carries no caveat',
+  !caveat.cardAssumed && !/measured against the page background/i.test(caveat.cardText));
+
+// "Has it finished reading the page?" needs an answer on screen.
+const progress = await heroPage.evaluate(async () => {
+  const app = globalThis.__LAO__.app;
+  const sr = app.shadow;
+  const bar = sr.querySelector('.lao-progress');
+  const fill = sr.querySelector('.lao-progress-fill');
+  const idleOpacity = getComputedStyle(bar).opacity;
+
+  const seen = [];
+  const scan = app.scan();
+  for (let i = 0; i < 8; i++) {
+    await new Promise((r) => requestAnimationFrame(r));
+    seen.push({
+      opacity: getComputedStyle(bar).opacity,
+      now: bar.getAttribute('aria-valuenow'),
+      text: sr.querySelector('.lao-status')?.textContent || '',
+    });
+  }
+  await scan;
+  await new Promise((r) => setTimeout(r, 500)); // Let the fade-out finish.
+
+  return {
+    idleOpacity,
+    role: bar.getAttribute('role'),
+    shownWhileScanning: seen.some((s) => s.opacity === '1'),
+    advanced: [...new Set(seen.map((s) => s.now))].filter((n) => n !== '0').length,
+    named: seen.some((s) => /Reading text colours|Checking headings|Checking images|keyboard order/i.test(s.text)),
+    hasPercent: seen.some((s) => /\d+%/.test(s.text)),
+    endsFull: fill.style.width === '100%',
+    hiddenAfter: getComputedStyle(bar).opacity,
+    coverage: sr.querySelector('.lao-coverage-state')?.textContent || '',
+    settledFlag: sr.querySelector('.lao-coverage-state')?.dataset.settled,
+  };
+});
+
+check('progress: the bar is a real progressbar, not a decoration',
+  progress.role === 'progressbar');
+check('progress: hidden when nothing is running',
+  progress.idleOpacity === '0' && progress.hiddenAfter === '0',
+  `idle ${progress.idleOpacity}, after ${progress.hiddenAfter}`);
+check('progress: visible while a pass is running', progress.shownWhileScanning);
+check('progress: advances through more than one step',
+  progress.advanced >= 2, `${progress.advanced} distinct values`);
+check('progress: says what it is reading right now', progress.named);
+check('progress: shows a percentage', progress.hasPercent);
+check('progress: finishes at 100%', progress.endsFull);
+check('progress: the coverage strip says whether the whole page was read',
+  /whole page has been read/i.test(progress.coverage) && progress.settledFlag === 'true',
+  progress.coverage.trim());
+
+// A page that keeps changing has not been fully read, and should say so rather
+// than quietly presenting a partial scan as complete.
+const unsettled = await heroPage.evaluate(async () => {
+  const app = globalThis.__LAO__.app;
+  const sr = app.shadow;
+  document.body.append(document.createElement('div'));
+  await new Promise((r) => setTimeout(r, 120));
+  const during = {
+    coverage: sr.querySelector('.lao-coverage-state')?.textContent || '',
+    settled: sr.querySelector('.lao-coverage-state')?.dataset.settled,
+    status: sr.querySelector('.lao-status')?.textContent || '',
+  };
+  await new Promise((r) => setTimeout(r, 3200));
+  return {
+    during,
+    after: sr.querySelector('.lao-coverage-state')?.dataset.settled,
+  };
+});
+
+check('progress: a page still changing is reported as not fully read',
+  unsettled.during.settled === 'false' && /still reading/i.test(unsettled.during.coverage),
+  unsettled.during.coverage.trim());
+check('progress: the footer says it is rechecking rather than claiming a final count',
+  /rechecking/i.test(unsettled.during.status), unsettled.during.status.trim());
+check('progress: it settles again once the page stops changing',
+  unsettled.after === 'true', `settled=${unsettled.after}`);
+
+await heroPage.close();
 
 /* ------------------------------------------------------- reduced motion */
 

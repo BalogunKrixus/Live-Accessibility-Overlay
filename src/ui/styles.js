@@ -457,6 +457,21 @@ svg { display: block; flex: none; }
 .lao-coverage-line b { color: var(--lao-text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .lao-sep { padding: 0 6px; color: var(--lao-line-strong); }
 
+/* Whether that count covers the finished page or a page still arriving. Said
+   in words, because "it looks done" is exactly the thing a spinner cannot
+   tell you. */
+.lao-coverage-state {
+  display: flex; align-items: center; gap: 7px;
+  margin-top: 5px;
+  font-size: var(--lao-size-micro);
+  color: var(--lao-text-faint);
+  line-height: 1.5;
+}
+.lao-coverage-state svg { flex: none; }
+.lao-coverage-state[data-settled="true"] { color: var(--lao-brand); }
+.lao-coverage-state[data-settled="false"] svg { animation: lao-spin 1.6s linear infinite; }
+@keyframes lao-spin { to { transform: rotate(360deg); } }
+
 /* ------------------------------------------------------------- all clear */
 
 .lao-clear {
@@ -643,6 +658,19 @@ svg { display: block; flex: none; }
   font-size: var(--lao-size-body); font-weight: 500;
   text-align: center;
 }
+
+/* Where the background colour was inferred rather than read. A number without
+   this note is a guess wearing a measurement's clothes. */
+.lao-caveat {
+  display: flex; align-items: flex-start; gap: 7px;
+  padding: 8px var(--lao-s4) 9px;
+  border-top: 1px solid var(--lao-line);
+  background: var(--lao-surface-sunken);
+  font-size: var(--lao-size-micro);
+  color: var(--lao-text-faint);
+  line-height: 1.5;
+}
+.lao-caveat svg { flex: none; margin-top: 1px; }
 
 .lao-quote {
   display: grid; gap: 4px;
@@ -837,11 +865,31 @@ svg { display: block; flex: none; }
 /* ------------------------------------------------------------------ footer */
 
 .lao-foot {
+  position: relative;
   flex: none;
   display: flex; align-items: center; justify-content: space-between; gap: var(--lao-s3);
   padding: 8px var(--lao-s2) 8px var(--lao-s4);
   border-top: 1px solid var(--lao-line);
   background: var(--lao-surface-sunken);
+}
+
+/* A determinate bar riding the top edge of the footer. It only exists while a
+   pass is running: a progress indicator that is always on screen stops meaning
+   anything. Four stages, so the fraction is real rather than decorative. */
+.lao-progress {
+  position: absolute; left: 0; right: 0; top: -1px;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--lao-t-base) var(--lao-ease-soft);
+}
+/* Appears at once and fades out afterwards: feedback that eases in is feedback
+   that arrives after the thing it was reporting on. */
+:host([data-scanning="true"]) .lao-progress { opacity: 1; transition: none; }
+.lao-progress-fill {
+  display: block; height: 100%; width: 0;
+  background: var(--lao-brand);
+  transition: width 220ms var(--lao-ease-soft);
 }
 .lao-foot-actions { display: flex; align-items: center; gap: 2px; flex: none; }
 .lao-status {
@@ -1031,6 +1079,8 @@ svg { display: block; flex: none; }
   .lao-clear-mark::before { animation: none; opacity: 0.75; transform: scale(0.82); }
   .lao-clear-mark::after { animation: none; opacity: 0.4; }
   :host([data-scanning="true"]) .lao-dot { animation: none; opacity: 0.5; }
+  .lao-coverage-state[data-settled="false"] svg { animation: none; }
+  .lao-progress-fill { transition: none; }
   .lao-mk--in, .lao-mk--in .lao-mk-frame, .lao-node { animation: none; }
   * { transition-duration: 1ms !important; }
 }

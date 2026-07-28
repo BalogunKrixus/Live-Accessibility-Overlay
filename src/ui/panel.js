@@ -66,6 +66,7 @@
         placeIndex: 0,
         techOpen: false,     // Sticky: a developer opens it once, not every time.
         scanning: true,
+        settled: true,       // Driven by the app; see setSettled.
       };
       this.rowButtons = new Map();
       this._build(root);
@@ -117,6 +118,19 @@
         class: 'lao-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true',
       }, el('span', { class: 'lao-dot-live', 'aria-hidden': 'true' }), this.statusText);
 
+      // A determinate bar, not a spinner. The pass has four known stages, so
+      // there is a real fraction to show — and a page that is still loading
+      // gets said in words rather than implied by an animation that never ends.
+      this.progressFill = el('span', { class: 'lao-progress-fill' });
+      this.progress = el('div', {
+        class: 'lao-progress',
+        role: 'progressbar',
+        'aria-label': 'Checking this page',
+        'aria-valuemin': '0',
+        'aria-valuemax': '100',
+        'aria-valuenow': '0',
+      }, this.progressFill);
+
       this.sideBtn = el('button', {
         type: 'button', class: 'lao-icon-btn lao-icon-btn--sm',
         title: 'Move panel to the other side',
@@ -134,6 +148,7 @@
       });
 
       const foot = el('div', { class: 'lao-foot' },
+        this.progress,
         this.status,
         el('div', { class: 'lao-foot-actions' }, this.sideBtn, this.rescanBtn));
 
@@ -171,7 +186,32 @@
     setScanning(scanning) {
       this.state.scanning = scanning;
       this.host.dataset.scanning = String(scanning);
-      if (scanning) this.statusText.textContent = 'Checking this page…';
+      if (scanning) {
+        this.statusText.textContent = 'Checking this page…';
+        this.setProgress(0);
+      }
+    }
+
+    /**
+     * @param {number} fraction 0–1 through the current pass.
+     * @param {string} [label] What is being read right now.
+     */
+    setProgress(fraction, label) {
+      const pct = Math.max(0, Math.min(100, Math.round(fraction * 100)));
+      this.progressFill.style.width = `${pct}%`;
+      this.progress.setAttribute('aria-valuenow', String(pct));
+      if (label) this.statusText.textContent = `${label}… ${pct}%`;
+    }
+
+    /**
+     * Whether the page has stopped changing. "Has it read all of it yet?" is
+     * only ambiguous while content is still arriving, so that is the thing
+     * worth reporting — a percentage of a pass that finishes in milliseconds
+     * would be theatre.
+     */
+    setSettled(settled) {
+      this.state.settled = settled;
+      if (!this.state.scanning) this._renderStatus();
     }
 
     setTheme(mode) { this._syncThemeButton(mode); }
@@ -288,9 +328,13 @@
         line.append(el('b', { text: String(n) }), document.createTextNode(` ${label}`));
       });
 
-      return el('div', { class: 'lao-coverage' },
+      this.coverageState = el('p', { class: 'lao-coverage-state' });
+      const strip = el('div', { class: 'lao-coverage' },
         el('h3', { class: 'lao-coverage-label', text: 'Checked on this page' }),
-        line);
+        line,
+        this.coverageState);
+      this._renderCoverageState();
+      return strip;
     }
 
     /** The two deeper views, kept out of the main flow so they never demand attention. */
@@ -319,10 +363,32 @@
     _renderStatus() {
       const items = this.state.items;
       const fix = items.filter((i) => i.tier === 'fix').length;
-      this.statusText.textContent = !items.length
-        ? 'No problems found'
-        : `${items.length} found · ${fix} to fix`;
+      const summary = !items.length ? 'No problems found' : `${items.length} found · ${fix} to fix`;
+      const settled = this.state.settled;
+
+      this.statusText.textContent = settled === false ? `${summary} · rechecking` : summary;
+      this.status.dataset.settled = String(settled !== false);
+      this.status.setAttribute('title', settled === false
+        ? 'The page is still loading or changing. This rechecks itself automatically.'
+        : 'The page has stopped changing, so this covers all of it.');
+
       this.host.dataset.scanning = 'false';
+      this.setProgress(1);
+      this._renderCoverageState();
+    }
+
+    /** The plain-words half of the answer, in the strip that lists coverage. */
+    _renderCoverageState() {
+      if (!this.coverageState) return;
+      const settled = this.state.settled !== false;
+      this.coverageState.dataset.settled = String(settled);
+      this.coverageState.replaceChildren(
+        el('span', { svg: settled ? icons.check(13) : icons.refresh(13), 'aria-hidden': 'true' }),
+        el('span', {
+          text: settled
+            ? 'The whole page has been read.'
+            : 'Still reading — the page is changing. This updates itself.',
+        }));
     }
 
     /* ---------------------------------------------------------- navigation */
@@ -486,7 +552,9 @@
      * whether this is bad and by how much.
      */
     _contrastReadout(issue) {
-      const ratio = color.round(issue.ratio, 2);
+      // Two decimals, always: "1" next to "needs 3:1" reads like a rounding
+      // artefact, where "1.00" reads like a measurement.
+      const ratio = issue.ratio.toFixed(2);
       const verdict = issue.ratio >= issue.requiredAAA ? 'aaa'
         : issue.ratio >= issue.required ? 'aa' : 'fail';
       const verdictLabel = { aaa: 'Passes AAA', aa: 'Passes AA', fail: 'Fails AA' }[verdict];
@@ -521,7 +589,19 @@
             class: 'lao-specimen-box',
             style: `background:${issue.bgHex};color:${issue.fgHex}`,
             text: 'Text like this',
-          })));
+          })),
+
+        // Nothing in the element's ancestry painted an opaque colour, so the
+        // background here is the page canvas rather than something the page
+        // actually set. Saying so is the difference between a measurement and
+        // a guess presented as one.
+        issue.assumedBackground
+          ? el('p', { class: 'lao-caveat' },
+              el('span', { svg: icons.contrast(13), 'aria-hidden': 'true' }),
+              el('span', {
+                text: 'Nothing behind this text sets a colour, so it was measured against the page background.',
+              }))
+          : null);
     }
 
     _howToFix(item, source) {

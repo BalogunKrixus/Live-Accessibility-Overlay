@@ -19,16 +19,101 @@
     return 'image';
   }
 
+  /* ------------------------------------------------------- media backdrops */
+
+  /**
+   * A hero photo is very often not a `background-image` at all — it is an
+   * `<img>` (or `<video>`, or a `<canvas>`) painted behind the text as a
+   * sibling. Walking `background-color` up the tree never touches it, so the
+   * walk falls all the way through to the page canvas and reports white text
+   * on white "background": a confident, wrong 1:1.
+   *
+   * So the walk also has to know where the painted media *elements* are.
+   */
+  const MEDIA_SELECTOR = 'img,svg,video,canvas,object,embed,iframe';
+
+  /** Media large enough to sit behind a block of text, with its rect cached. */
+  function collectMedia() {
+    const out = [];
+    for (const node of util.queryDeep(MEDIA_SELECTOR)) {
+      let cs;
+      try {
+        cs = getComputedStyle(node);
+      } catch {
+        continue;
+      }
+      // Deliberately not util.isRendered(): that treats aria-hidden as absent,
+      // and a decorative hero image is aria-hidden almost by definition. What
+      // matters here is only whether it puts pixels on the screen.
+      if (cs.display === 'none' || cs.visibility === 'hidden' || cs.visibility === 'collapse') continue;
+      if (parseFloat(cs.opacity) < 0.06) continue;
+
+      const r = node.getBoundingClientRect();
+      if (r.width < 24 || r.height < 24) continue; // Icons, spacers, tracking pixels.
+      out.push({ node, rect: r, chain: null });
+    }
+    return out;
+  }
+
+  /** Fraction of `rect` that `other` covers. */
+  function coverage(rect, other) {
+    const area = rect.width * rect.height;
+    if (area <= 0) return 0;
+    const w = Math.min(rect.right, other.right) - Math.max(rect.left, other.left);
+    const h = Math.min(rect.bottom, other.bottom) - Math.max(rect.top, other.top);
+    if (w <= 0 || h <= 0) return 0;
+    return (w * h) / area;
+  }
+
+  /** Ancestors including shadow hosts — `contains` stops at a shadow boundary. */
+  function composedChain(node) {
+    const chain = new Set();
+    let n = node;
+    while (n) {
+      chain.add(n);
+      n = n.parentElement || n.getRootNode()?.host || null;
+    }
+    return chain;
+  }
+
+  /**
+   * Media that covers most of this text's box and is not an ancestor of it.
+   * "Most" matters: an inline icon next to a line of text overlaps its box
+   * slightly and is not a backdrop, while a hero image covers all of it.
+   */
+  function coveringMedia(el, rect, media) {
+    if (!media.length) return [];
+    const own = composedChain(el);
+    const hits = [];
+    for (const m of media) {
+      if (m.node === el || own.has(m.node)) continue;
+      if (coverage(rect, m.rect) < 0.6) continue;
+      hits.push(m);
+    }
+    return hits;
+  }
+
   /**
    * Walk up from the text's element, compositing background layers until an
    * opaque one is found. Crossing a shadow boundary follows the host element,
    * because that is where the visual stacking actually continues.
    */
-  function resolveBackdrop(el) {
+  function resolveBackdrop(el, media = []) {
     const layers = [];
     let node = el;
 
+    const covering = coveringMedia(el, el.getBoundingClientRect(), media);
+
     while (node && node.nodeType === 1) {
+      // Media inside this node paints on top of this node's background, so it
+      // has to be tested before the background is trusted. Once an opaque
+      // background has been found further down, anything above it in the tree
+      // is hidden behind it and never gets this far.
+      for (const m of covering) {
+        m.chain ||= composedChain(m.node);
+        if (m.chain.has(node)) return { unmeasurable: 'image', node: m.node };
+      }
+
       const cs = getComputedStyle(node);
       const kind = backdropKind(cs);
       if (kind) {
@@ -80,6 +165,7 @@
 
   function run() {
     const owners = util.collectTextOwners(document);
+    const media = collectMedia();
     const issues = [];
     let measured = 0;
 
@@ -106,7 +192,7 @@
       // not a contrast problem — treat it separately rather than as a 1:1 fail.
       if (rawFg.a === 0) continue;
 
-      const backdrop = resolveBackdrop(el);
+      const backdrop = resolveBackdrop(el, media);
       const rect = util.rectOf(el);
       if (rect.w === 0 || rect.h === 0) continue;
 

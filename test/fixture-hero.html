@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Text over a hero image</title>
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; }
+
+  /* The shape almost every marketing site uses: a photo as an <img> element
+     stretched behind the copy, not as a CSS background-image. */
+  .hero { position: relative; height: 420px; }
+  .hero > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .hero-copy { position: relative; padding: 110px 60px; }
+  .hero-copy h1 { margin: 0 0 12px; color: #FFFFFF; font-size: 44px; }
+  .hero-copy p { margin: 0; color: #FFFFFF; font-size: 17px; }
+
+  /* An opaque card overlapping the same photo: the photo is behind the card,
+     so the text on the card must still be measured against the card. */
+  .card { position: relative; margin: -70px 60px 0; background: #FFFFFF; padding: 32px; }
+  .card p { margin: 0; color: #9AA0AC; font-size: 16px; }
+
+  /* A small icon beside a line of text is not a backdrop. */
+  .icon-row { display: flex; align-items: center; gap: 12px; padding: 40px 60px; background: #FFFFFF; }
+  .icon-row img { width: 40px; height: 40px; }
+  .icon-row span { color: #8A8F99; font-size: 16px; }
+</style>
+</head>
+<body>
+  <div class="hero">
+    <img alt="" src="data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='800'%20height='400'%3E%3Crect%20width='800'%20height='400'%20fill='%23486049'/%3E%3C/svg%3E">
+    <div class="hero-copy">
+      <h1>Achieving Sustainable Success</h1>
+      <p>Copy that sits directly on the photograph.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <p>Readable-ish text on an opaque card that overlaps the photograph.</p>
+  </div>
+
+  <!-- Nothing in this element's ancestry paints a colour, so its background is
+       the page canvas rather than anything the page chose. -->
+  <p class="bare" style="color: #A9AEB8; font-size: 16px; padding: 40px 60px; margin: 0;">
+    Text on nothing but the page canvas.
+  </p>
+
+  <div class="icon-row">
+    <img alt="" src="data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='40'%20height='40'%3E%3Ccircle%20cx='20'%20cy='20'%20r='18'%20fill='%23486049'/%3E%3C/svg%3E">
+    <span>Label beside an icon, not on top of one.</span>
+  </div>
+</body>
+</html>

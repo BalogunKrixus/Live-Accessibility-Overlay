@@ -124,9 +124,13 @@ check('messaging: content script answers the ping handshake', injected.pong === 
 // The content script lives in an isolated world, so its globals are invisible
 // here by design. Everything below is asserted through the DOM the user
 // actually sees, which is the stronger test anyway.
+// The panel opens first and reports its progress while it reads the page, so
+// wait for the pass to finish rather than for the panel to appear.
 await page.waitForFunction(() => {
   const host = document.querySelector('live-accessibility-overlay');
-  return host?.shadowRoot?.querySelector('.lao-panel[data-state="open"]');
+  const sr = host?.shadowRoot;
+  if (!sr?.querySelector('.lao-panel[data-state="open"]')) return false;
+  return host.dataset.scanning === 'false';
 }, null, { timeout: 10000 });
 
 const live = await page.evaluate(() => {
@@ -158,7 +162,13 @@ check('runtime: no uncaught page errors', pageErrors.length === 0, pageErrors.jo
 // The toolbar badge: it must carry the same number the panel lists, scoped to
 // this tab. A badge that disagrees with the panel is worse than no badge.
 const badge = await worker.evaluate(async (tabId) => {
-  const text = await chrome.action.getBadgeText({ tabId });
+  // The count travels from the page to the worker by message, so it lands a
+  // beat after the panel has rendered it.
+  let text = '';
+  for (let i = 0; i < 40 && !text; i++) {
+    text = await chrome.action.getBadgeText({ tabId });
+    if (!text) await new Promise((r) => setTimeout(r, 50));
+  }
   const colour = await chrome.action.getBadgeBackgroundColor({ tabId });
   // A tab the extension has never run in must carry no badge of its own.
   const otherTab = await chrome.tabs.create({ url: 'about:blank', active: false });

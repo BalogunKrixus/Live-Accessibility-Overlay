@@ -16,6 +16,21 @@
   const { util } = LAO;
   const STORAGE_KEY = 'lao:prefs';
 
+  /** How long the DOM must be quiet before the page counts as fully read. */
+  const SETTLE_MS = 1200;
+
+  /**
+   * The pass, in the order it runs. Named stages exist so the panel can show a
+   * real fraction rather than an indeterminate spinner — and so "what is it
+   * doing right now" has an answer in plain words.
+   */
+  const STAGES = [
+    ['contrast', 'Reading text colours', () => LAO.auditContrast.run()],
+    ['headings', 'Checking headings', () => LAO.auditHeadings.run()],
+    ['images', 'Checking images', () => LAO.auditImages.run()],
+    ['tabs', 'Following the keyboard order', () => LAO.auditTabOrder.run()],
+  ];
+
   /**
    * Chrome's `chrome.*` returns promises under MV3; Firefox's is callback-based
    * and only `browser.*` returns promises. Awaiting `chrome.*` in Firefox would
@@ -33,6 +48,7 @@
       this.results = null;
       this.isOpen = false;
       this.scanToken = 0;
+      this.settled = document.readyState === 'complete';
 
       this._mount();
       this._loadPrefs();
@@ -132,24 +148,28 @@
       const token = ++this.scanToken;
       this.panel.setScanning(true);
 
-      // Yield once so the scanning state paints before a long synchronous pass.
-      await new Promise((r) => requestAnimationFrame(r));
-      if (token !== this.scanToken) return;
-
       const started = performance.now();
-      let results;
-      try {
-        results = {
-          contrast: LAO.auditContrast.run(),
-          headings: LAO.auditHeadings.run(),
-          images: LAO.auditImages.run(),
-          tabs: LAO.auditTabOrder.run(),
-        };
-      } catch (err) {
-        console.error('[Live Accessibility Overlay] scan failed', err);
-        this.panel.setScanning(false);
-        return;
+      const results = {};
+
+      // One stage per frame. Yielding between them costs a few frames and buys
+      // two things: the progress actually moves, and a heavy page is never
+      // frozen for the whole pass.
+      for (let i = 0; i < STAGES.length; i++) {
+        const [key, label, run] = STAGES[i];
+        this.panel.setProgress(i / STAGES.length, label);
+
+        await new Promise((r) => requestAnimationFrame(r));
+        if (token !== this.scanToken) return;
+
+        try {
+          results[key] = run();
+        } catch (err) {
+          console.error(`[Live Accessibility Overlay] ${key} check failed`, err);
+          this.panel.setScanning(false);
+          return;
+        }
       }
+      this.panel.setProgress(1);
       if (token !== this.scanToken) return;
 
       this.results = results;
@@ -185,6 +205,37 @@
 
     /* --------------------------------------------------------- live updates */
 
+    /**
+     * "Is it still reading the page?" has two halves. How far through the
+     * current pass it is, the progress bar answers. Whether that pass saw the
+     * whole page is the harder one: a scan is a snapshot, and a page that is
+     * still fetching images or hydrating a lazy section will keep changing
+     * underneath it. So track that directly — the page counts as fully read
+     * once loading has finished *and* the DOM has been quiet for a moment.
+     */
+    _noteActivity() {
+      this._lastChange = performance.now();
+      if (this.settled !== false) {
+        this.settled = false;
+        this.panel.setSettled(false);
+      }
+      this._watchSettle();
+    }
+
+    _watchSettle() {
+      clearTimeout(this._settleTimer);
+      if (!this.isOpen) return;
+      this._settleTimer = setTimeout(() => {
+        const quiet = performance.now() - (this._lastChange || 0) >= SETTLE_MS;
+        if (document.readyState === 'complete' && quiet) {
+          this.settled = true;
+          this.panel.setSettled(true);
+        } else {
+          this._watchSettle();
+        }
+      }, SETTLE_MS);
+    }
+
     _observe() {
       // Pages that stream content in should not require a manual rescan, but a
       // scan on every mutation would fight the page for the main thread. A
@@ -198,6 +249,7 @@
           // Ignore our own DOM, and ignore attribute noise on the host.
           if (util.isOurs(record.target) || record.target === this.host) continue;
           if (record.target?.getRootNode?.() === this.shadow) continue;
+          this._noteActivity();
           rescan();
           return;
         }
@@ -211,6 +263,13 @@
         attributeFilter: ['class', 'style', 'alt', 'aria-label', 'aria-hidden', 'tabindex', 'hidden', 'role'],
       });
 
+      // Late images and stylesheets change what there is to measure, so a scan
+      // that ran before `load` has not seen the finished page.
+      if (document.readyState !== 'complete') {
+        this.settled = false;
+        addEventListener('load', () => this._noteActivity(), { once: true });
+      }
+
       // A theme change at the OS level should retint the panel immediately.
       this._mq = matchMedia('(prefers-color-scheme: dark)');
       this._mq.addEventListener?.('change', () => this.panel.setTheme(this.prefs.theme));
@@ -223,12 +282,15 @@
       this.isOpen = true;
       this.host.style.display = '';
       this.panel.open();
+      this.panel.setSettled(this.settled !== false);
+      this._watchSettle();
       this.scan();
     }
 
     close() {
       if (!this.isOpen) return;
       this.isOpen = false;
+      clearTimeout(this._settleTimer);
       this.panel.close();
       this.overlay.clear();
       this.overlay.setTabPath(false);
