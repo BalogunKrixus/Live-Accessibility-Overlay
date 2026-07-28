@@ -3,7 +3,7 @@
 Everything the Developer Dashboard asks for, ready to paste. Build the package
 with `npm run package` and the images with `npm run store-assets`.
 
-Upload: `dist/live-accessibility-overlay-v1.0.0.zip`
+Upload: `dist/live-accessibility-overlay-chrome-v1.1.0.zip`
 Images: `dist/store/`
 
 ---
@@ -39,7 +39,8 @@ is hard to read", "This image has no description", "Keyboard focus jumps backwar
 by what to fix first, then down the page.
 
 Open one and you get why it matters, who it affects, and how to fix it. For colour problems
-it suggests the closest colour to your original that people can actually read, ready to copy.
+it shows the text colour, the background colour and the contrast score, then suggests the
+closest colour to your original that people can actually read, ready to copy.
 
 Only the issue you are looking at is marked on the page, so a page with real problems never
 turns into a wall of boxes. Press Next to walk through the rest.
@@ -60,13 +61,20 @@ a map you can click through.
 BUILT WITH CARE ABOUT FALSE POSITIVES
 
 Screen-reader-only text and disabled controls are excluded, because neither is a real
-problem and reporting them is what trains people to ignore a tool. Where a background is an
-image or a gradient, it says the contrast cannot be measured rather than guessing.
+problem and reporting them is what trains people to ignore a tool. Where text sits on a
+photograph or a gradient, it says the contrast cannot be measured rather than inventing a
+number.
+
+It also tells you when it has finished reading the page, so a page still loading never
+hands you a partial result that looks complete.
 
 FOR DEVELOPERS TOO
 
 Every ratio, hex value, CSS selector and WCAG reference is one click away under "Technical
 details" — present when you want it, invisible when you do not.
+
+The panel is itself fully keyboard navigable, respects prefers-reduced-motion, follows your
+light or dark theme, and its own palette is contrast-tested in both.
 
 PRIVACY
 
@@ -153,7 +161,7 @@ them in only if you want them — the images read fine without):
 
 ## Before you submit
 
-- [ ] `npm test` passes (117 UI + 23 packaged-extension checks)
+- [ ] `npm test` passes (146 UI checks under both API shapes, 23 packaged-extension checks)
 - [ ] `npm run package` reports no blocking problems
 - [ ] Load `dist/…zip` unpacked once and click through it yourself
 - [ ] Developer account registered and the one-off $5 USD fee paid
@@ -163,6 +171,29 @@ them in only if you want them — the images read fine without):
 
 Review typically takes a few hours to a few days. Extensions with no host
 permissions and no data collection — which is this one — are on the fastest path.
+
+## Updating an already-published listing
+
+An update is a different flow from a first submission, and much shorter.
+
+1. `npm run package` — the version in `manifest.json` must be **higher** than the published
+   one, or the upload is rejected outright.
+2. Developer Dashboard → the existing item → **Package** → **Upload new package**.
+3. Upload `dist/live-accessibility-overlay-chrome-v1.1.0.zip`.
+4. **Do not touch the Privacy practices tab** unless the permissions changed. They have not:
+   `activeTab`, `scripting`, `storage`, exactly as approved. An unchanged permission set is
+   what keeps an update on the fast path.
+5. Refresh the screenshots if the interface has changed — a listing showing a UI the
+   extension no longer has is worth fixing even though nothing forces you to.
+6. **Submit for review.**
+
+The published version stays live and untouched the whole time the update is in review. If
+the update is rejected, users keep the working one.
+
+There is no release-notes field in the Chrome Web Store. Anything users should know about a
+release has to go in the description.
+
+---
 
 ## If it gets rejected
 
