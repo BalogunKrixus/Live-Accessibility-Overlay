@@ -571,7 +571,7 @@
         el('div', { class: 'lao-contrast-score' },
           el('div', { class: 'lao-score-figure' },
             el('b', { text: String(ratio) }),
-            el('span', { text: ': 1' })),
+            el('span', { text: ':1' })),
           el('div', { class: 'lao-score-side' },
             el('span', { class: 'lao-verdict', data: { verdict }, text: verdictLabel }),
             el('span', {
