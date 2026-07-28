@@ -1,6 +1,6 @@
 {
   "name": "live-accessibility-overlay",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Chrome extension that surfaces accessibility problems on the live page, in context.",
   "type": "module",

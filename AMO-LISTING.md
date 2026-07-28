@@ -1,6 +1,6 @@
 # addons.mozilla.org submission
 
-Build with `npm run package`, then upload `dist/live-accessibility-overlay-firefox-v1.0.0.zip`
+Build with `npm run package`, then upload `dist/live-accessibility-overlay-firefox-v1.1.0.zip`
 at [addons.mozilla.org/developers/addon/submit/distribution](https://addons.mozilla.org/developers/addon/submit/distribution).
 
 AMO's flow differs from Chrome's in three ways worth knowing before you start:

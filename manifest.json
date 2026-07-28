@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Live Accessibility Overlay",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Find accessibility problems on any page, in plain language: contrast, headings, alt text and keyboard order. Checked locally.",
   "minimum_chrome_version": "111",
   "permissions": [
